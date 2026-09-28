@@ -78,6 +78,10 @@
             <p>The map couldn't load. You can still paste a code or coordinates in the panel.</p>
           </div>
           <div class="map-hint" id="mapHint">Click the map to get a code</div>
+          <button type="button" class="fab" id="locateFab" aria-label="Get the code for my current location">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+            <span>My location</span>
+          </button>
         </div>
 
         <aside class="panel" aria-label="Code details">
@@ -93,6 +97,7 @@
             <p class="label">Location code</p>
             <div class="flap flap-panel" id="panelFlap" data-text="CLICK-THE-MAP"></div>
             <p class="describe" id="describe">Pick a spot on the map to see its code.</p>
+            <p class="m-intro" id="mIntro">Every place on Earth, named from its nearest airport. Tap the map or use <b>My location</b>. <a href="#how">What is this?</a></p>
 
             <dl class="facts" id="facts" hidden>
               <div><dt>Airport</dt><dd id="fAirport">—</dd></div>
@@ -112,7 +117,7 @@
 
             <div class="actions">
               <button class="btn btn-small" id="copyBtn" type="button" disabled>Copy code</button>
-              <button class="btn btn-small btn-ghost" id="shareBtn" type="button" disabled>Copy link</button>
+              <button class="btn btn-small btn-ghost" id="shareBtn" type="button" disabled>Copy share link</button>
               <button class="btn btn-small btn-ghost" id="locateBtn" type="button">Use my location</button>
             </div>
             <p class="privacy">“Use my location” is computed on your device and never uploaded.</p>
