@@ -51,5 +51,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/:code([A-Za-z]{3}-[A-La-l][0-9.]{4,15})",
+      "destination": "/index.html"
+    }
   ]
 }

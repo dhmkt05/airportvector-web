@@ -9,6 +9,9 @@
   var CELL = { "1km": "1 km × 1 km", "100m": "100 m × 100 m", "10m": "10 m × 10 m", "1m": "1 m × 1 m" };
 
   var $ = function (id) { return document.getElementById(id); };
+  var MOBILE = window.matchMedia("(max-width: 760px)");
+  var CODE_PATH = /^\/([A-Za-z]{3}-[A-La-l][0-9]{2,7}(?:\.?[0-9]{2,7}))\/?$/;
+  function shareUrl(code) { return location.origin + "/" + code; }
   var state = { lat: null, lon: null, code: null, anchor: null, typedBase: null };
   var ready = false;
   var map = null, mapReady = false, pointMarker = null, airportMarker = null;
@@ -128,7 +131,9 @@
     setPrecisionRadio(p.precision);
     showError(null);
 
-    try { history.replaceState(null, "", "?c=" + encodeURIComponent(p.code) + location.hash); } catch (e) { /* ignore */ }
+    try { history.replaceState(null, "", "/" + p.code + location.hash); } catch (e) { /* ignore */ }
+    document.body.classList.add("has-code");
+    syncSheet();
     drawOnMap(p, a, centre, opts.fly !== false);
   }
 
@@ -230,9 +235,12 @@
     if (dist < 150000) {
       var b = new maplibregl.LngLatBounds();
       pts.forEach(function (c) { b.extend(c); });
-      map.fitBounds(b, { padding: 70, maxZoom: 15, duration: REDUCED ? 0 : 1400 });
+      var sheet = MOBILE.matches ? $("result").offsetHeight : 0;
+      var pad = MOBILE.matches ? { top: 80, bottom: sheet + 80, left: 40, right: 40 } : 70;
+      map.fitBounds(b, { padding: pad, maxZoom: 15, duration: REDUCED ? 0 : 1400 });
     } else {
-      map.flyTo({ center: [centre.lon, centre.lat], zoom: dist > 2000000 ? 2 : 4, duration: REDUCED ? 0 : 1600 });
+      map.flyTo({ center: [centre.lon, centre.lat], zoom: dist > 2000000 ? 2 : 4, duration: REDUCED ? 0 : 1600,
+                  offset: [0, MOBILE.matches ? -$("result").offsetHeight / 2 : 0] });
     }
   }
 
@@ -271,24 +279,45 @@
     });
 
     $("copyBtn").addEventListener("click", function () { copy(state.code, "Code copied"); });
-    $("shareBtn").addEventListener("click", function () {
-      copy(location.origin + "/?c=" + encodeURIComponent(state.code), "Link copied");
-    });
-    $("locateBtn").addEventListener("click", function () {
-      if (!navigator.geolocation) { toast("Location isn't available in this browser"); return; }
-      toast("Finding you…");
-      navigator.geolocation.getCurrentPosition(function (pos) {
-        var lat = pos.coords.latitude, lon = pos.coords.longitude;
-        fromPoint(lat, lon);
-        placePoint(lon, lat);
-        $("mapHint").classList.add("gone");
-      }, function () { toast("Couldn't get your location"); }, { enableHighAccuracy: true, timeout: 10000 });
-    });
+    $("shareBtn").addEventListener("click", function () { copy(shareUrl(state.code), "Share link copied"); });
+    $("locateBtn").addEventListener("click", locateMe);
+    $("locateFab").addEventListener("click", locateMe);
+    window.addEventListener("resize", syncSheet);
     document.querySelectorAll(".chip").forEach(function (b) {
       b.addEventListener("click", function () {
         try { fromCode(b.getAttribute("data-code")); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
       });
     });
+  }
+
+  function locateMe() {
+    if (!ready) { toast("Still loading airports…"); return; }
+    if (!navigator.geolocation) { toast("Location isn't available in this browser"); return; }
+    var fab = $("locateFab");
+    fab.classList.add("busy");
+    toast("Finding you…");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      fab.classList.remove("busy");
+      var lat = pos.coords.latitude, lon = pos.coords.longitude;
+      try {
+        fromPoint(lat, lon);
+        placePoint(lon, lat);
+        $("mapHint").classList.add("gone");
+        var acc = Math.round(pos.coords.accuracy || 0);
+        toast(acc ? "Found you · GPS accurate to ±" + acc + " m" : "Found you");
+      } catch (err) { showError(err.message); }
+    }, function (err) {
+      fab.classList.remove("busy");
+      toast(err && err.code === 1 ? "Location permission was blocked" : "Couldn't get your location");
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  }
+
+  // Keep the map's controls and the location button above the mobile bottom card.
+  function syncSheet() {
+    var grid = document.querySelector(".demo-grid");
+    if (!grid) return;
+    var h = MOBILE.matches ? $("result").offsetHeight : 0;
+    grid.style.setProperty("--sheet", h + "px");
   }
 
   function copy(text, msg) {
@@ -302,7 +331,12 @@
   function boot() {
     tickClock(); setInterval(tickClock, 15000);
     renderFlap($("heroFlap"), HERO[0].code, false);
-    renderFlap($("panelFlap"), "CLICK-THE-MAP", false);
+    renderFlap($("panelFlap"), MOBILE.matches ? "TAP-THE-MAP" : "CLICK-THE-MAP", false);
+    if (MOBILE.matches) {
+      $("mapHint").textContent = "Tap anywhere on the map";
+      $("searchInput").placeholder = "Paste a code or lat, lon";
+    }
+    syncSheet();
     wire();
     initMap();
 
@@ -313,7 +347,8 @@
         ready = true;
         heroShow(false);
         setInterval(function () { heroIdx = (heroIdx + 1) % HERO.length; heroShow(true); }, 5200);
-        var c = new URLSearchParams(location.search).get("c");
+        var m = location.pathname.match(CODE_PATH);
+        var c = m ? m[1] : new URLSearchParams(location.search).get("c");
         if (c) {
           try { fromCode(c); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
         }
