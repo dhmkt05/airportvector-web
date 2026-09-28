@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AirportVector — every place on Earth, named from its nearest airport</title>
+  <meta name="description" content="AirportVector (OAVG) is an open, human-readable location code. Every point on Earth is written from its nearest airport: TRZ-D04200355 = 5.5 km north-west of Trichy airport.">
+  <meta name="theme-color" content="#0f1216">
+  <link rel="canonical" href="https://airportvector.org/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://airportvector.org/">
+  <meta property="og:title" content="AirportVector — every place on Earth, named from its nearest airport">
+  <meta property="og:description" content="An open, human-readable location code. TRZ-D04200355 = 5.5 km north-west of Trichy airport. Try the live map.">
+  <meta property="og:image" content="https://airportvector.org/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+        integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip" href="#demo">Skip to the live map</a>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="AirportVector home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4"/><path d="M8 24 L24 8 M24 8 H13 M24 8 V19" /></svg>
+      <span>Airport<b>Vector</b></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#demo">Live map</a>
+      <a href="#how">How it works</a>
+      <a href="#coverage">Coverage</a>
+      <a href="#developers">Developers</a>
+      <a class="nav-gh" href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- HERO ------------------------------------------------------------ -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="gate">GATE A–L</span> Open location code · spec v2.1</p>
+        <h1 id="hero-title">Every place on Earth,<br><span class="hl">named from its nearest airport.</span></h1>
+        <p class="lede">No word lists. No random letters. An AirportVector code tells you <em>which airport</em>, <em>which direction</em> and <em>how far</em> — before you even open a map.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#demo">Try the live map</a>
+          <a class="btn btn-ghost" href="#how">Read a code in 10 seconds</a>
+        </div>
+      </div>
+
+      <div class="board" aria-live="polite" aria-label="Example codes">
+        <div class="board-head">
+          <span>DEPARTURES</span><span>LOCATION CODE</span><span class="board-clock" id="clock">--:--</span>
+        </div>
+        <div class="board-row">
+          <div class="flap" id="heroFlap" data-text="TRZ-D04200355"></div>
+        </div>
+        <div class="board-sub" id="heroSub">5.5 km north-west of Tiruchirappalli International Airport</div>
+        <div class="board-foot"><span class="dot"></span><span id="heroPlace">Near Trichy Central Bus Stand, India</span></div>
+      </div>
+    </section>
+
+    <!-- DEMO ------------------------------------------------------------ -->
+    <section class="demo" id="demo" aria-labelledby="demo-title">
+      <div class="section-head">
+        <h2 id="demo-title"><span class="num">01</span> Live map</h2>
+        <p>Click anywhere — land, sea, even Antarctica. Or paste a code. Everything runs in your browser; nothing is sent to a server.</p>
+      </div>
+
+      <div class="demo-grid">
+        <div class="map-wrap">
+          <div id="map" role="application" aria-label="World map. Click to get a location code."></div>
+          <div class="map-fallback" id="mapFallback" hidden>
+            <p>The map couldn't load. You can still paste a code or coordinates in the panel.</p>
+          </div>
+          <div class="map-hint" id="mapHint">Click the map to get a code</div>
+        </div>
+
+        <aside class="panel" aria-label="Code details">
+          <form class="search" id="searchForm" autocomplete="off">
+            <label for="searchInput" class="visually-hidden">Code or coordinates</label>
+            <input id="searchInput" type="text" inputmode="text" spellcheck="false"
+                   placeholder="Paste a code or lat, lon (e.g. 51.5074, -0.1278)" maxlength="60">
+            <button type="submit" class="btn btn-small">Go</button>
+          </form>
+          <p class="search-error" id="searchError" role="alert" hidden></p>
+
+          <div class="result" id="result">
+            <p class="label">Location code</p>
+            <div class="flap flap-panel" id="panelFlap" data-text="CLICK-THE-MAP"></div>
+            <p class="describe" id="describe">Pick a spot on the map to see its code.</p>
+
+            <dl class="facts" id="facts" hidden>
+              <div><dt>Airport</dt><dd id="fAirport">—</dd></div>
+              <div><dt>Direction</dt><dd id="fDir">—</dd></div>
+              <div><dt>Band</dt><dd id="fBand">—</dd></div>
+              <div><dt>Cell</dt><dd id="fCell">—</dd></div>
+              <div class="wide"><dt>Coordinates</dt><dd id="fCoord">—</dd></div>
+            </dl>
+
+            <fieldset class="precision" id="precision">
+              <legend class="label">Precision</legend>
+              <label><input type="radio" name="prec" value="1km"><span>1 km</span></label>
+              <label><input type="radio" name="prec" value="100m"><span>100 m</span></label>
+              <label><input type="radio" name="prec" value="10m" checked><span>10 m</span></label>
+              <label><input type="radio" name="prec" value="1m"><span>1 m</span></label>
+            </fieldset>
+
+            <div class="actions">
+              <button class="btn btn-small" id="copyBtn" type="button" disabled>Copy code</button>
+              <button class="btn btn-small btn-ghost" id="shareBtn" type="button" disabled>Copy link</button>
+              <button class="btn btn-small btn-ghost" id="locateBtn" type="button">Use my location</button>
+            </div>
+            <p class="privacy">“Use my location” is computed on your device and never uploaded.</p>
+          </div>
+
+          <div class="try">
+            <p class="label">Try these</p>
+            <div class="chips">
+              <button type="button" class="chip" data-code="LCY-D12710024">London</button>
+              <button type="button" class="chip" data-code="DJG-F2590508465">Sahara</button>
+              <button type="button" class="chip" data-code="IPC-K104561248302">Point Nemo</button>
+              <button type="button" class="chip" data-code="USH-J000000392217">South Pole</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- HOW ------------------------------------------------------------- -->
+    <section class="how" id="how" aria-labelledby="how-title">
+      <div class="section-head">
+        <h2 id="how-title"><span class="num">02</span> Read a code in 10 seconds</h2>
+        <p>A code is an airport, one letter, and two distances. That's all.</p>
+      </div>
+
+      <div class="anatomy" aria-label="Anatomy of the code TRZ-D04200355">
+        <div class="ana-code">
+          <span class="seg seg-a">TRZ</span><span class="seg seg-dash">-</span><span class="seg seg-l">D</span><span class="seg seg-x">0420</span><span class="seg seg-y">0355</span>
+        </div>
+        <ol class="ana-keys">
+          <li class="k-a"><b>TRZ</b> The nearest airport — Tiruchirappalli, India.</li>
+          <li class="k-l"><b>D</b> Direction <em>and</em> distance band: North-West, under 100 km.</li>
+          <li class="k-x"><b>0420</b> 420 cells West. At 10 m per cell: 4,200 m.</li>
+          <li class="k-y"><b>0355</b> 355 cells North: 3,550 m.</li>
+        </ol>
+        <p class="ana-note">Distance to the airport is √(4.2² + 3.55²) ≈ <b>5.5 km</b>. Quick trick: the bigger number + half the smaller one.</p>
+      </div>
+
+      <div class="letters">
+        <h3>The letter tells direction and distance</h3>
+        <div class="letter-grid" role="table" aria-label="Sector letters">
+          <div class="lg-row lg-head" role="row"><span role="columnheader"></span><span role="columnheader">NE</span><span role="columnheader">SE</span><span role="columnheader">SW</span><span role="columnheader">NW</span></div>
+          <div class="lg-row" role="row"><span role="rowheader">Near <small>&lt; 100 km</small></span><span class="lt b0">A</span><span class="lt b0">B</span><span class="lt b0">C</span><span class="lt b0">D</span></div>
+          <div class="lg-row" role="row"><span role="rowheader">Regional <small>&lt; 1,000 km</small></span><span class="lt b1">E</span><span class="lt b1">F</span><span class="lt b1">G</span><span class="lt b1">H</span></div>
+          <div class="lg-row" role="row"><span role="rowheader">Far <small>&lt; 10,000 km</small></span><span class="lt b2">I</span><span class="lt b2">J</span><span class="lt b2">K</span><span class="lt b2">L</span></div>
+        </div>
+        <p class="rule">Every 4 letters = <b>10× further</b>, and one more digit per axis.</p>
+      </div>
+
+      <div class="precision-table">
+        <h3>Shorter code, bigger square</h3>
+        <ul class="prec-list">
+          <li><code>TRZ-D0403</code><span>1 km</span></li>
+          <li><code>TRZ-D042035</code><span>100 m</span></li>
+          <li><code>TRZ-D04200355</code><span>10 m</span></li>
+          <li><code>TRZ-D0420303554</code><span>1 m</span></li>
+        </ul>
+        <p class="rule">Each half of a short code is the start of the longer one — trimming digits just zooms out.</p>
+      </div>
+    </section>
+
+    <!-- COVERAGE -------------------------------------------------------- -->
+    <section class="coverage" id="coverage" aria-labelledby="cov-title">
+      <div class="section-head">
+        <h2 id="cov-title"><span class="num">03</span> No gaps. Anywhere.</h2>
+        <p>4,133 commercial airports anchor the whole planet. The farthest any point gets from its nearest airport is about 5,150 km — deep in Antarctica.</p>
+      </div>
+      <figure class="cov-fig">
+        <img src="/coverage.webp" width="2400" height="1275" loading="lazy" decoding="async"
+             alt="World map coloured by distance band: green near airports, yellow regional, orange far (mostly ocean and Antarctica).">
+        <figcaption>
+          <span class="swatch b0"></span>A–D near · 18% of the globe, 49% of land
+          <span class="swatch b1"></span>E–H regional · 54% / 51%
+          <span class="swatch b2"></span>I–L far · 29% / &lt;0.1%
+        </figcaption>
+      </figure>
+
+      <div class="why">
+        <article>
+          <h3>Human context</h3>
+          <p>“NW of Trichy airport, 5 km” means something to a person. A string of random letters or three random words doesn't tell you where on Earth to start.</p>
+        </article>
+        <article>
+          <h3>Exact distances</h3>
+          <p>The grid is azimuthal-equidistant on the WGS84 ellipsoid, so √(X² + Y²) is the true ground distance to the airport.</p>
+        </article>
+        <article>
+          <h3>Open &amp; offline</h3>
+          <p>A small anchor file and plain maths. No lookups, no accounts, no network — the demo above runs entirely in your browser.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- DEVELOPERS ------------------------------------------------------ -->
+    <section class="dev" id="developers" aria-labelledby="dev-title">
+      <div class="section-head">
+        <h2 id="dev-title"><span class="num">04</span> Developers</h2>
+        <p>Reference implementations in Python and JavaScript, tested against each other on 78,000+ cases.</p>
+      </div>
+      <div class="dev-grid">
+        <div class="snippet">
+          <div class="snippet-head"><span>Python</span><span>airportvector.py</span></div>
+<pre><code>import airportvector as av
+
+av.encode(10.7950461, 78.6793020)
+# 'TRZ-D04200355'
+av.describe("TRZ-D04200355")
+# '5.5 km NW of TRZ (Tiruchirappalli International Airport)'
+av.decode("TRZ-D04200355")
+# (10.795052, 78.679291)</code></pre>
+        </div>
+        <div class="snippet">
+          <div class="snippet-head"><span>JavaScript</span><span>oavg.js</span></div>
+<pre><code>OAVG.loadRegistry(await (await fetch("/anchors.json")).json());
+
+OAVG.encode(51.5074, -0.1278);      // "LCY-D12710024"
+OAVG.describe("IPC-K104561248302"); // "2,694 km SSW of IPC (…)"
+OAVG.move("TRZ-D04200355", 50, 0);  // 500 m East</code></pre>
+        </div>
+      </div>
+      <div class="dev-links">
+        <a class="btn btn-primary" href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub repository ↗</a>
+        <a class="btn btn-ghost" href="/spec-v2.1.pdf">Specification v2.1 (PDF)</a>
+        <a class="btn btn-ghost" href="/oavg.js" download>Download oavg.js</a>
+        <a class="btn btn-ghost" href="/anchors.json" download>Download anchors.json</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4"/><path d="M8 24 L24 8 M24 8 H13 M24 8 V19" /></svg><span>Airport<b>Vector</b></span></a>
+        <p class="small">Open Airport Vector Grid (OAVG) · draft specification v2.1.</p>
+        <p class="small warn">Draft: airport coordinates are not yet verified against official sources. Do not use for navigation, aviation or emergency services.</p>
+      </div>
+      <div class="small">
+        <p><b>Credits</b></p>
+        <p>Airport data: <a href="https://ourairports.com/" rel="noopener">OurAirports</a> (public domain).</p>
+        <p>Map: <a href="https://openfreemap.org/" rel="noopener">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors, <a href="https://maplibre.org/" rel="noopener">MapLibre</a>.</p>
+        <p>Code: Business Source License 1.1 — see <a href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub</a>.</p>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
+          integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous" defer></script>
+  <script src="/oavg.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

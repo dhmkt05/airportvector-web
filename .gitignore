@@ -1,0 +1,19 @@
+# Secrets - never commit these
+.env
+.env.*
+*.pem
+*.key
+
+# Tooling
+node_modules/
+.vercel/
+.tmpnpm/
+test/vectors.json
+__pycache__/
+*.py[cod]
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

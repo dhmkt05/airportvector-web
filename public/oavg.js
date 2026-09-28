@@ -1,0 +1,603 @@
+// Copyright (c) 2026 AirportVector Authors
+// This source code is licensed under the Business Source License 1.1 (BSL).
+// Free for development, non-commercial use, and internal deployment.
+// Commercial SaaS hosting or paid API distribution is strictly prohibited.
+// See LICENSE.md in the root directory for full terms.
+/*
+ * oavg.js - browser port of AirportVector (Open Airport Vector Grid, OAVG v2.1).
+ *
+ * Faithful, dependency-free port of the Python reference implementation
+ * airportvector.py v2.1.1. Plain ES2019 script: defines the global `OAVG`.
+ *
+ *     TRZ-D04200355  =  Trichy airport, North-West (near band),
+ *                       X = 0420 (4,200 m West), Y = 0355 (3,550 m North), 10 m cell
+ *
+ *     A B C D  = NE SE SW NW, under 100 km
+ *     E F G H  = NE SE SW NW, 100 - 999 km      (+1 digit per axis)
+ *     I J K L  = NE SE SW NW, 1,000 - 9,999 km  (+2 digits per axis)
+ *
+ * Usage:  OAVG.loadRegistry(await (await fetch('anchors.json')).json());
+ *         OAVG.encode(10.7950461, 78.679302)  // "TRZ-D04200355"
+ *
+ * Python semantics reproduced on purpose: float `%` and `//` (sign of divisor,
+ * fmod-based), round-half-even in number formatting and round(x, n).
+ */
+(function (root) {
+  'use strict';
+
+  // ------------------------------------------------------------------------
+  // Constants
+  // ------------------------------------------------------------------------
+  var VERSION = '2.1.1';
+  var SPEC_VERSION = '2.1';
+  /** precision name -> base digits per axis. Cell size = 10 ** (5 - base) metres. */
+  var PRECISIONS = { '1km': 2, '100m': 3, '10m': 4, '1m': 5 };
+  var PRECISION_NAME = { 2: '1km', 3: '100m', 4: '10m', 5: '1m' };
+  var DEFAULT_PRECISION = '10m';
+  var SECTORS = 'ABCD';            // NE, SE, SW, NW (clockwise)
+  var MAX_BAND = 2;                // bands 0..2 -> letters A..L
+  var LETTERS = 'ABCDEFGHIJKL';
+  var BAND_LIMIT_M = [100000, 1000000, 10000000];  // band b: max(|X|,|Y|) < limit
+  var CODE_RE = /^([A-Z]{3})-([A-L])([0-9]+)(?:\.([0-9]+))?$/;
+  var STATUSES = ['active', 'retired'];
+  var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+                 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+
+  // ------------------------------------------------------------------------
+  // Errors
+  // ------------------------------------------------------------------------
+  /** Any invalid input, unknown anchor, or out-of-range location. */
+  class OAVGError extends Error {
+    constructor(message) { super(message); this.name = 'OAVGError'; }
+  }
+  /** Vincenty's inverse method did not converge (nearly antipodal points). */
+  class NoConvergence extends OAVGError {
+    constructor(message) { super(message); this.name = 'NoConvergence'; }
+  }
+
+  // ------------------------------------------------------------------------
+  // Python-compatible helpers
+  // ------------------------------------------------------------------------
+  /** Python float `a % b` (result takes the sign of b). */
+  function pyMod(a, b) {
+    var m = a % b;
+    if (m !== 0) { if ((b < 0) !== (m < 0)) m += b; } else { m = b < 0 ? -0 : 0; }
+    return m;
+  }
+  /** Python float `a // b` (CPython float_floor_div algorithm). */
+  function pyFloorDiv(a, b) {
+    var mod = a % b;
+    var div = (a - mod) / b;
+    if (mod !== 0 && (b < 0) !== (mod < 0)) { div -= 1; }
+    if (div !== 0) {
+      var fd = Math.floor(div);
+      if (div - fd > 0.5) fd += 1;
+      return fd;
+    }
+    return (a / b) < 0 ? -0 : 0;
+  }
+  /** CPython 3.10+ math.hypot (vector_norm): near-correctly-rounded, unlike V8's Math.hypot. */
+  function hypot(a, b) {
+    a = Math.abs(a); b = Math.abs(b);
+    var max = a > b ? a : b;
+    if (max === Infinity) return max;
+    if (a !== a || b !== b) return NaN;
+    if (max === 0) return 0;
+    var e = Math.floor(Math.log2(max)) + 1;              // frexp exponent: max = m * 2^e, m in [0.5, 1)
+    if (Math.pow(2, e - 1) > max) e -= 1; else if (Math.pow(2, e) <= max) e += 1;
+    if (e < -1000 || e > 1000) return Math.hypot(a, b);  // extreme magnitudes: not used by OAVG
+    var scale = Math.pow(2, -e), csum = 1.0, frac1 = 0.0, frac2 = 0.0, pr, sm, x;
+    function split(v) { var t = v * 134217729.0, hi = t - (t - v); return [hi, v - hi]; }
+    function mul(u, v) {  // Dekker: exact product as hi + lo
+      var uu = split(u), vv = split(v), p = uu[0] * vv[0], q = uu[0] * vv[1] + uu[1] * vv[0];
+      var z = p + q; return [z, p - z + q + uu[1] * vv[1]];
+    }
+    function fastSum(s, t) { var z = s + t; return [z, t - (z - s)]; }
+    [a, b].forEach(function (v) {
+      x = v * scale; pr = mul(x, x); sm = fastSum(csum, pr[0]);
+      csum = sm[0]; frac1 += pr[1]; frac2 += sm[1];
+    });
+    var h = Math.sqrt(csum - 1.0 + (frac1 + frac2));
+    pr = mul(-h, h); sm = fastSum(csum, pr[0]);
+    csum = sm[0]; frac1 += pr[1]; frac2 += sm[1];
+    x = csum - 1.0 + (frac1 + frac2);
+    h += x / (2.0 * h);   // differential correction
+    return h / scale;
+  }
+  var DEG2RAD = Math.PI / 180;  // CPython math.radians: x * (pi / 180)
+  var RAD2DEG = 180 / Math.PI;   // CPython math.degrees: x * (180 / pi)
+  function radians(d) { return d * DEG2RAD; }
+  function degrees(r) { return r * RAD2DEG; }
+
+  /** Exact decimal expansion of a finite double, rounded half-even to f decimals.
+   *  Matches Python's format(x, '.{f}f') / round(x, f). Returns [sign, intDigits, fracDigits]. */
+  function roundHalfEvenDigits(x, f) {
+    var neg = x < 0 || (x === 0 && 1 / x < 0);
+    var s = Math.abs(x).toFixed(100);            // exact for all magnitudes used here
+    var dot = s.indexOf('.');
+    var ip = s.slice(0, dot), fp = s.slice(dot + 1);
+    var keep = fp.slice(0, f), rest = fp.slice(f);
+    var digits = ip + keep;
+    var up = false;
+    if (rest[0] > '5') up = true;
+    else if (rest[0] === '5') {
+      if (/[1-9]/.test(rest.slice(1))) up = true;
+      else up = (Number(digits[digits.length - 1]) % 2) === 1;  // exact tie -> even
+    }
+    if (up) {
+      var arr = digits.split(''), k = arr.length - 1;
+      while (k >= 0) {
+        if (arr[k] === '9') { arr[k] = '0'; k--; } else { arr[k] = String(Number(arr[k]) + 1); break; }
+      }
+      if (k < 0) arr.unshift('1');
+      digits = arr.join('');
+    }
+    var ipart = digits.slice(0, digits.length - f).replace(/^0+(?=\d)/, '');
+    return [neg, ipart || '0', digits.slice(digits.length - f)];
+  }
+  /** Python f"{x:.{f}f}" or, with commas, f"{x:,.{f}f}". */
+  function formatFixed(x, f, commas) {
+    if (!isFinite(x)) return isNaN(x) ? 'nan' : (x < 0 ? '-inf' : 'inf');
+    var r = roundHalfEvenDigits(x, f);
+    var ip = r[1];
+    if (commas) ip = ip.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (r[0] ? '-' : '') + ip + (f > 0 ? '.' + r[2] : '');
+  }
+  /** Python round(x, n) for floats (correctly rounded, half-even). */
+  function pyRound(x, n) {
+    if (!isFinite(x) || x === 0) return x;
+    var r = roundHalfEvenDigits(x, n);
+    var v = Number(r[1] + '.' + r[2]);
+    return r[0] ? -v : v;
+  }
+  /** Python str.strip() whitespace for ASCII input. */
+  function pyStrip(s) { return s.replace(/^[\t\n\x0b\x0c\r\x1c-\x1f ]+|[\t\n\x0b\x0c\r\x1c-\x1f ]+$/g, ''); }
+  /** Approximation of Python repr() for error messages. */
+  function pyRepr(v) {
+    if (typeof v === 'string') {
+      var q = (v.indexOf("'") >= 0 && v.indexOf('"') < 0) ? '"' : "'";
+      var out = '';
+      for (var ch of v) {
+        var c = ch.codePointAt(0);
+        if (ch === '\\') out += '\\\\';
+        else if (ch === q) out += '\\' + q;
+        else if (ch === '\n') out += '\\n';
+        else if (ch === '\r') out += '\\r';
+        else if (ch === '\t') out += '\\t';
+        else if (c < 0x20 || c === 0x7f) out += '\\x' + ('0' + c.toString(16)).slice(-2);
+        else out += ch;
+      }
+      return q + out + q;
+    }
+    if (typeof v === 'boolean') return v ? 'True' : 'False';
+    if (typeof v === 'number') return isNaN(v) ? 'nan' : (v === Infinity ? 'inf' : (v === -Infinity ? '-inf' : String(v)));
+    if (v === null || v === undefined) return 'None';
+    return String(v);
+  }
+  function isPyNumber(v) { return typeof v === 'number'; }  // JS has no bool/int subtype issue
+
+  // ------------------------------------------------------------------------
+  // Anchor registry
+  // ------------------------------------------------------------------------
+  var registry = null;   // {code: {code, name, lat, lon, status}}
+  var active = null;     // [{a, ux, uy, uz}] for active anchors, precomputed
+
+  function unit(lat, lon) {
+    var p = radians(lat), l = radians(lon);
+    return [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)];
+  }
+
+  /** Load anchors: array of [code, lat, lon, name(, status)] or {code, lat, lon, name, status}. */
+  function loadRegistry(rows) {
+    if (!Array.isArray(rows)) throw new OAVGError('Registry must be an array of anchors');
+    var anchors = Object.create(null);
+    rows.forEach(function (row) {
+      var r = Array.isArray(row)
+        ? { code: row[0], lat: row[1], lon: row[2], name: row[3], status: row[4] }
+        : row;
+      var code = pyStrip(String(r.code == null ? '' : r.code)).toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code)) throw new OAVGError('Registry code ' + pyRepr(code) + ' must be 3 letters');
+      if (code in anchors) throw new OAVGError('Registry has duplicate code ' + pyRepr(code));
+      var name = pyStrip(String(r.name == null ? '' : r.name));
+      var status = pyStrip(String(r.status == null || r.status === '' ? 'active' : r.status)).toLowerCase();
+      var lat = typeof r.lat === 'number' ? r.lat : parseFloat(r.lat);
+      var lon = typeof r.lon === 'number' ? r.lon : parseFloat(r.lon);
+      if (typeof r.lat === 'string' && !/^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$|^\s*[-+]?(nan|inf|infinity)\s*$/i.test(r.lat)) lat = undefined;
+      if (typeof r.lon === 'string' && !/^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$|^\s*[-+]?(nan|inf|infinity)\s*$/i.test(r.lon)) lon = undefined;
+      if (typeof lat !== 'number' || typeof lon !== 'number') throw new OAVGError('Registry row ' + code + ': lat/lon must be numbers');
+      if (!(isFinite(lat) && isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) {
+        throw new OAVGError('Registry row ' + code + ': lat/lon out of range (' + pyRepr(lat) + ', ' + pyRepr(lon) + ')');
+      }
+      if (!name) throw new OAVGError('Registry row ' + code + ': name is empty');
+      if (STATUSES.indexOf(status) < 0) {
+        throw new OAVGError('Registry row ' + code + ": status must be one of ('active', 'retired'), got " + pyRepr(status));
+      }
+      anchors[code] = Object.freeze({ code: code, name: name, lat: lat, lon: lon, status: status });
+    });
+    registry = anchors;
+    active = [];
+    Object.keys(anchors).forEach(function (k) {
+      var a = anchors[k];
+      if (a.status === 'active') { var u = unit(a.lat, a.lon); active.push({ a: a, ux: u[0], uy: u[1], uz: u[2] }); }
+    });
+    return Object.keys(anchors).length;
+  }
+
+  function requireRegistry() {
+    if (registry === null) throw new OAVGError('Registry not loaded; call OAVG.loadRegistry(anchors) first');
+    return registry;
+  }
+
+  function getAnchor(code) {
+    var reg = requireRegistry();
+    var key = typeof code === 'string' ? pyStrip(code).toUpperCase() : null;
+    if (key !== null && key in reg) return reg[key];
+    throw new OAVGError('Unknown anchor code ' + pyRepr(code));
+  }
+
+  // ------------------------------------------------------------------------
+  // Geodesy on the WGS84 ellipsoid (Vincenty's formulae, ~0.1 mm accuracy).
+  // Grid = Azimuthal Equidistant projection centred on the anchor:
+  //     X = s * sin(azimuth),  Y = s * cos(azimuth)
+  // ------------------------------------------------------------------------
+  var A_ = 6378137.0;
+  var F_ = 1 / 298.257223563;
+  var B_ = A_ * (1 - F_);
+
+  function reduced(latRad) {
+    var u = Math.atan2((1 - F_) * Math.sin(latRad), Math.cos(latRad));
+    return [Math.sin(u), Math.cos(u)];
+  }
+  function ab(cos2Alpha) {
+    var u2 = cos2Alpha * (A_ * A_ - B_ * B_) / (B_ * B_);
+    var bigA = 1 + u2 / 16384 * (4096 + u2 * (-768 + u2 * (320 - 175 * u2)));
+    var bigB = u2 / 1024 * (256 + u2 * (-128 + u2 * (74 - 47 * u2)));
+    return [bigA, bigB];
+  }
+  function deltaSigma(bigB, sinS, cosS, cos2sm) {
+    return bigB * sinS * (cos2sm + bigB / 4 * (cosS * (-1 + 2 * (cos2sm * cos2sm))
+      - bigB / 6 * cos2sm * (-3 + 4 * (sinS * sinS)) * (-3 + 4 * (cos2sm * cos2sm))));
+  }
+
+  /** Distance (m) and initial azimuth (radians, clockwise from North) from point 1 to point 2. */
+  function geodesicInverse(lat1, lon1, lat2, lon2) {
+    var r1 = reduced(radians(lat1)), r2 = reduced(radians(lat2));
+    var sinU1 = r1[0], cosU1 = r1[1], sinU2 = r2[0], cosU2 = r2[1];
+    var bigL = radians(pyMod(lon2 - lon1 + 540.0, 360.0) - 180.0);
+    var lam = bigL, converged = false;
+    var sinS, cosS, sigma, sinAlpha, cos2Alpha, cos2sm;
+    for (var it = 0; it < 200; it++) {
+      var sinL = Math.sin(lam), cosL = Math.cos(lam);
+      sinS = hypot(cosU2 * sinL, cosU1 * sinU2 - sinU1 * cosU2 * cosL);
+      if (sinS === 0) return [0.0, 0.0];
+      cosS = sinU1 * sinU2 + cosU1 * cosU2 * cosL;
+      sigma = Math.atan2(sinS, cosS);
+      sinAlpha = cosU1 * cosU2 * sinL / sinS;
+      cos2Alpha = 1 - sinAlpha * sinAlpha;
+      cos2sm = cos2Alpha !== 0 ? cosS - 2 * sinU1 * sinU2 / cos2Alpha : 0.0;
+      var c = F_ / 16 * cos2Alpha * (4 + F_ * (4 - 3 * cos2Alpha));
+      var lamPrev = lam;
+      lam = bigL + (1 - c) * F_ * sinAlpha * (sigma + c * sinS * (cos2sm + c * cosS * (-1 + 2 * (cos2sm * cos2sm))));
+      if (Math.abs(lam - lamPrev) < 1e-13) { converged = true; break; }
+    }
+    if (!converged) throw new NoConvergence('Points are nearly antipodal; geodesic did not converge');
+    var abv = ab(cos2Alpha);
+    var s = B_ * abv[0] * (sigma - deltaSigma(abv[1], sinS, cosS, cos2sm));
+    var az = Math.atan2(cosU2 * Math.sin(lam), cosU1 * sinU2 - sinU1 * cosU2 * Math.cos(lam));
+    return [s, az];
+  }
+
+  /** Point reached from (lat1, lon1) travelling s metres at initial azimuth (radians). */
+  function geodesicDirect(lat1, lon1, azimuth, s) {
+    if (s === 0) return [lat1, lon1];
+    var r1 = reduced(radians(lat1)), sinU1 = r1[0], cosU1 = r1[1];
+    var sinA1 = Math.sin(azimuth), cosA1 = Math.cos(azimuth);
+    var sigma1 = Math.atan2(sinU1, cosU1 * cosA1);
+    var sinAlpha = cosU1 * sinA1;
+    var cos2Alpha = 1 - sinAlpha * sinAlpha;
+    var abv = ab(cos2Alpha), bigA = abv[0], bigB = abv[1];
+    var sigma = s / (B_ * bigA), cos2sm, sinS, cosS;
+    for (var it = 0; it < 200; it++) {
+      cos2sm = Math.cos(2 * sigma1 + sigma);
+      sinS = Math.sin(sigma); cosS = Math.cos(sigma);
+      var sigmaPrev = sigma;
+      sigma = s / (B_ * bigA) + deltaSigma(bigB, sinS, cosS, cos2sm);
+      if (Math.abs(sigma - sigmaPrev) < 1e-13) break;
+    }
+    cos2sm = Math.cos(2 * sigma1 + sigma);
+    sinS = Math.sin(sigma); cosS = Math.cos(sigma);
+    var tmp = sinU1 * sinS - cosU1 * cosS * cosA1;
+    var lat2 = Math.atan2(sinU1 * cosS + cosU1 * sinS * cosA1, (1 - F_) * hypot(sinAlpha, tmp));
+    var lam = Math.atan2(sinS * sinA1, cosU1 * cosS - sinU1 * sinS * cosA1);
+    var c = F_ / 16 * cos2Alpha * (4 + F_ * (4 - 3 * cos2Alpha));
+    var bigL = lam - (1 - c) * F_ * sinAlpha * (sigma + c * sinS * (cos2sm + c * cosS * (-1 + 2 * (cos2sm * cos2sm))));
+    var lon2 = pyMod(lon1 + degrees(bigL) + 540.0, 360.0) - 180.0;
+    return [degrees(lat2), lon2];
+  }
+
+  function sphericalM(lat1, lon1, lat2, lon2) {
+    var p1 = radians(lat1), p2 = radians(lat2);
+    var a = Math.sin((p2 - p1) / 2), b = Math.sin(radians(lon2 - lon1) / 2);
+    var h = a * a + Math.cos(p1) * Math.cos(p2) * (b * b);
+    return 2 * 6371008.8 * Math.asin(Math.min(1.0, Math.sqrt(h)));
+  }
+
+  /** True ground distance in metres between two lat/lon points (WGS84).
+   *  Nearly antipodal points (Vincenty non-convergence) fall back to a spherical estimate. */
+  function distanceM(lat1, lon1, lat2, lon2) {
+    try { return geodesicInverse(lat1, lon1, lat2, lon2)[0]; } catch (e) {
+      if (e instanceof NoConvergence) return sphericalM(lat1, lon1, lat2, lon2);
+      throw e;
+    }
+  }
+
+  function checkLatLon(lat, lon) {
+    [lat, lon].forEach(function (v) {
+      if (!isPyNumber(v) || !isFinite(v)) throw new OAVGError('Latitude/longitude must be finite numbers, got ' + pyRepr(v));
+    });
+    if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) {
+      throw new OAVGError('Latitude/longitude out of range: ' + lat + ', ' + lon);
+    }
+  }
+
+  function resolveAnchor(anchor) { return typeof anchor === 'string' ? getAnchor(anchor) : anchor; }
+
+  /** lat/lon (degrees) -> {x, y} metres from the anchor. X+ = East, Y+ = North. */
+  function toGrid(anchor, lat, lon) {
+    var a = resolveAnchor(anchor);
+    checkLatLon(lat, lon);
+    var r;
+    try { r = geodesicInverse(a.lat, a.lon, lat, lon); } catch (e) {
+      if (e instanceof NoConvergence) throw new OAVGError('Location is on the far side of the Earth from ' + a.code + '; out of range');
+      throw e;
+    }
+    var s = r[0], az = r[1];
+    if (Math.abs(lat) === 90) return { x: 0.0, y: lat > 0 ? s : -s };  // pole: due N/S
+    var x = s * Math.sin(az), y = s * Math.cos(az);
+    // snap floating-point noise so points exactly on an axis get one sector
+    return { x: Math.abs(x) < 1e-6 ? 0.0 : x, y: Math.abs(y) < 1e-6 ? 0.0 : y };
+  }
+
+  /** {x, y} metres from the anchor -> {lat, lon} degrees. */
+  function fromGrid(anchor, x, y) {
+    var a = resolveAnchor(anchor);
+    var r = geodesicDirect(a.lat, a.lon, Math.atan2(x, y), hypot(x, y));
+    return { lat: r[0], lon: r[1] };
+  }
+
+  // ------------------------------------------------------------------------
+  // Codes
+  // ------------------------------------------------------------------------
+  function pad(n, d) { var s = String(n); while (s.length < d) s = '0' + s; return s; }
+
+  function makeCode(anchor, sector, band, x, y, base) {
+    var d = base + band;
+    var letter = LETTERS[SECTORS.indexOf(sector) + 4 * band];
+    return {
+      anchor: anchor, sector: sector, band: band, letter: letter, x: x, y: y, base: base,
+      digits: d, cellSize: Math.pow(10, 5 - base), precision: PRECISION_NAME[base],
+      code: anchor + '-' + letter + pad(x, d) + pad(y, d),
+      display: anchor + '-' + letter + pad(x, d) + '.' + pad(y, d)
+    };
+  }
+
+  function baseFor(precision) {
+    if (typeof precision === 'number' && Number.isInteger(precision) && PRECISION_NAME[precision]) return precision;
+    var key = String(precision).toLowerCase().replace(/ /g, '');
+    if (!Object.prototype.hasOwnProperty.call(PRECISIONS, key)) {
+      throw new OAVGError('Unknown precision ' + pyRepr(precision) + "; use one of ['1km', '100m', '10m', '1m']");
+    }
+    return PRECISIONS[key];
+  }
+
+  // Tie rule: exactly zero counts as East / North.
+  function sectorOf(x, y) { return x >= 0 ? (y >= 0 ? 'A' : 'B') : (y >= 0 ? 'D' : 'C'); }
+
+  function bandOf(ax, ay) {
+    if (!(isFinite(ax) && isFinite(ay))) throw new OAVGError('Grid distances must be finite numbers');
+    var m = Math.max(ax, ay);
+    for (var b = 0; b <= MAX_BAND; b++) if (m < BAND_LIMIT_M[b]) return b;
+    throw new OAVGError('Location is ' + formatFixed(m / 1000, 3, true) + ' km from the anchor on one axis; ' +
+      'it must be under ' + formatFixed(BAND_LIMIT_M[MAX_BAND] / 1000, 0, true) + ' km');
+  }
+
+  /** Encode grid metres (X, Y) from an anchor. Truncates (never rounds). */
+  function encodeGrid(anchor, x, y, precision) {
+    var a = getAnchor(anchor);
+    var base = baseFor(precision === undefined ? DEFAULT_PRECISION : precision);
+    var band = bandOf(Math.abs(x), Math.abs(y));
+    var cell = Math.pow(10, 5 - base);
+    return makeCode(a.code, sectorOf(x, y), band, pyFloorDiv(Math.abs(x), cell), pyFloorDiv(Math.abs(y), cell), base).code;
+  }
+
+  /** Canonical anchor: nearest ACTIVE airport by true ground distance; exact ties alphabetical. */
+  function nearestAnchorObj(lat, lon) {
+    checkLatLon(lat, lon);
+    requireRegistry();
+    if (!active.length) throw new OAVGError('Registry has no active anchors');
+    var p = unit(lat, lon), px = p[0], py = p[1], pz = p[2];
+    var n = active.length, dots = new Float64Array(n), bestDot = -Infinity, i;
+    for (i = 0; i < n; i++) {
+      var e = active[i];
+      var d = e.ux * px + e.uy * py + e.uz * pz;
+      dots[i] = d;
+      if (d > bestDot) bestDot = d;
+    }
+    // Fast pre-filter on the sphere, then exact ellipsoidal distance for close candidates.
+    var bestAng = Math.acos(Math.max(-1.0, Math.min(1.0, bestDot)));
+    var margin = bestAng * 1.01 + 2e-4;  // ~1% + ~1.3 km: ellipsoid vs sphere difference
+    // acos(dot) <= margin  <=>  dot >= cos(margin); a small slack lets the exact acos test decide.
+    var cutoff = margin >= Math.PI ? -Infinity : Math.cos(margin) - 1e-9;
+    var best = null, bestDist = Infinity;
+    for (i = 0; i < n; i++) {
+      if (dots[i] < cutoff) continue;
+      if (Math.acos(Math.max(-1.0, Math.min(1.0, dots[i]))) > margin) continue;
+      var a = active[i].a;
+      var dist = distanceM(lat, lon, a.lat, a.lon);
+      if (dist < bestDist || (dist === bestDist && a.code < best.code)) { best = a; bestDist = dist; }
+    }
+    return best;
+  }
+
+  function nearestAnchor(lat, lon) {
+    var a = nearestAnchorObj(lat, lon);
+    return { code: a.code, name: a.name, lat: a.lat, lon: a.lon };
+  }
+
+  /** lat/lon (degrees, WGS84) -> OAVG code. precision: "1km" | "100m" | "10m" (default) | "1m". */
+  function encode(lat, lon, precision, anchor) {
+    if (precision === undefined || precision === null) precision = DEFAULT_PRECISION;
+    var a;
+    if (anchor === undefined || anchor === null) {
+      a = nearestAnchorObj(lat, lon);
+    } else {
+      a = getAnchor(anchor);
+      if (a.status !== 'active') throw new OAVGError('Anchor ' + a.code + ' is ' + a.status + '; it can be decoded but not used for new codes');
+    }
+    var g = toGrid(a, lat, lon);
+    return encodeGrid(a.code, g.x, g.y, precision);
+  }
+
+  /** Validate and split a code. Accepts any letter case and the dotted display form. */
+  function parse(code) {
+    if (typeof code !== 'string') throw new OAVGError('Code must be a string');
+    var cps = Array.from(code);
+    if (!/^[\x00-\x7f]*$/.test(code) || cps.length > 40) {
+      throw new OAVGError('Invalid OAVG code ' + pyRepr(cps.slice(0, 40).join('')) + ": use only A-Z, 0-9, '-' and '.'");
+    }
+    var m = CODE_RE.exec(pyStrip(code).toUpperCase());
+    if (!m) throw new OAVGError('Invalid OAVG code ' + pyRepr(code) + '. Expected e.g. TRZ-D04200355');
+    var anchor = m[1], letter = m[2], first = m[3], second = m[4], digits;
+    if (second !== undefined) {
+      if (first.length !== second.length) throw new OAVGError('Invalid code ' + pyRepr(code) + ': X and Y must have the same number of digits');
+      digits = first + second;
+    } else {
+      digits = first;
+    }
+    var idx = LETTERS.indexOf(letter);
+    var sector = SECTORS[idx % 4], band = Math.floor(idx / 4);
+    if (digits.length % 2) throw new OAVGError('Invalid code ' + pyRepr(code) + ': odd number of digits');
+    var d = digits.length / 2;
+    var base = d - band;
+    if (!PRECISION_NAME[base]) {
+      throw new OAVGError('Invalid code ' + pyRepr(code) + ': sector ' + letter + ' needs ' + (2 + band) + '-' + (5 + band) +
+        ' digits per axis (got ' + d + ')');
+    }
+    var x = parseInt(digits.slice(0, d), 10), y = parseInt(digits.slice(d), 10);
+    if (band > 0 && Math.max(x, y) < Math.pow(10, d - 1)) {
+      throw new OAVGError('Invalid code ' + pyRepr(code) + ': this location belongs in a nearer band ' +
+        '(use letter ' + LETTERS[SECTORS.indexOf(sector) + 4 * (band - 1)] + ')');
+    }
+    getAnchor(anchor);  // throws if unknown
+    return makeCode(anchor, sector, band, x, y, base);
+  }
+
+  // Signed cell index: West/South cells are numbered -X-1 so cell 0 and -1 touch the axis.
+  function signedIndex(c) {
+    var i = (c.sector === 'A' || c.sector === 'B') ? c.x : -c.x - 1;
+    var j = (c.sector === 'A' || c.sector === 'D') ? c.y : -c.y - 1;
+    return [i, j];
+  }
+
+  function fromIndex(anchor, i, j, base) {
+    var x = i >= 0 ? i : -i - 1;
+    var y = j >= 0 ? j : -j - 1;
+    var cell = Math.pow(10, 5 - base);
+    var band = bandOf(x * cell, y * cell);   // a cell never straddles a band edge
+    var sector = i >= 0 ? (j >= 0 ? 'A' : 'B') : (j >= 0 ? 'D' : 'C');
+    return makeCode(anchor, sector, band, x, y, base);
+  }
+
+  /** Code -> {anchor, x, y} of the cell centre, in metres. */
+  function decodeGrid(code) {
+    var c = parse(code), ij = signedIndex(c), size = c.cellSize;
+    return { anchor: c.anchor, x: (ij[0] + 0.5) * size, y: (ij[1] + 0.5) * size };
+  }
+
+  /** Code -> {lat, lon} of the cell centre (full precision; Python rounds to 6 by default). */
+  function decode(code) {
+    var g = decodeGrid(code);
+    return fromGrid(g.anchor, g.x, g.y);
+  }
+
+  /** Cell's 4 corners as [lat, lon], grid order (-X,-Y), (+X,-Y), (+X,+Y), (-X,+Y). */
+  function cellPolygon(code) {
+    var c = parse(code), ij = signedIndex(c), s = c.cellSize, i = ij[0], j = ij[1];
+    return [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(function (g) {
+      var p = fromGrid(c.anchor, g[0] * s, g[1] * s);
+      return [p.lat, p.lon];
+    });
+  }
+
+  /** Shift a code by whole cells (negative = West / South). Handles sector and band changes. */
+  function move(code, eastCells, northCells) {
+    if (eastCells === undefined) eastCells = 0;
+    if (northCells === undefined) northCells = 0;
+    [eastCells, northCells].forEach(function (v) {
+      if (typeof v !== 'number' || !Number.isInteger(v)) throw new OAVGError('Cells to move must be whole numbers, got ' + pyRepr(v));
+    });
+    var c = parse(code), ij = signedIndex(c);
+    return fromIndex(c.anchor, ij[0] + eastCells, ij[1] + northCells, c.base).code;
+  }
+
+  /** Reduce precision by truncating each half, e.g. TRZ-D0420303554 -> TRZ-D04200355. */
+  function shorten(code, precision) {
+    var c = parse(code), base = baseFor(precision);
+    if (base > c.base) throw new OAVGError('Cannot add precision that the code does not have');
+    var cut = Math.pow(10, c.base - base);
+    return makeCode(c.anchor, c.sector, c.band, Math.floor(c.x / cut), Math.floor(c.y / cut), base).code;
+  }
+
+  /** Canonical form: upper case, no dot. */
+  function normalize(code) { return parse(code).code; }
+
+  /** Exact ground distance (m) from the airport to the cell centre: sqrt(X^2 + Y^2). */
+  function distanceFromAnchorM(code) { var g = decodeGrid(code); return hypot(g.x, g.y); }
+
+  /** Ground distance in metres between two codes (like Python: centres rounded to 9 decimals). */
+  function distance(code1, code2) {
+    var p = decode(code1), q = decode(code2);
+    return distanceM(pyRound(p.lat, 9), pyRound(p.lon, 9), pyRound(q.lat, 9), pyRound(q.lon, 9));
+  }
+
+  /** Plain-language reading, e.g. '5.5 km NW of TRZ (Tiruchirappalli International Airport)'. */
+  function describe(code) {
+    var c = parse(code), g = decodeGrid(code);
+    var d = hypot(g.x, g.y);
+    var bearing = pyMod(degrees(Math.atan2(g.x, g.y)) + 360, 360);
+    var point = COMPASS[pyMod(Math.trunc(pyFloorDiv(bearing + 11.25, 22.5)), 16)];
+    var dist = d < 10000 ? formatFixed(d / 1000, 1, false) + ' km' : formatFixed(d / 1000, 0, true) + ' km';
+    return dist + ' ' + point + ' of ' + c.anchor + ' (' + getAnchor(c.anchor).name + ')';
+  }
+
+  function publicAnchor(a) { return { code: a.code, name: a.name, lat: a.lat, lon: a.lon, status: a.status }; }
+
+  root.OAVG = Object.freeze({
+    version: VERSION,
+    SPEC_VERSION: SPEC_VERSION,
+    PRECISIONS: Object.freeze(Object.assign({}, PRECISIONS)),
+    DEFAULT_PRECISION: DEFAULT_PRECISION,
+    OAVGError: OAVGError,
+    loadRegistry: loadRegistry,
+    getAnchor: function (code) { return publicAnchor(getAnchor(code)); },
+    encode: encode,
+    encodeGrid: encodeGrid,
+    decode: decode,
+    decodeGrid: decodeGrid,
+    parse: parse,
+    describe: describe,
+    distance: distance,
+    distanceM: distanceM,
+    distanceFromAnchorM: distanceFromAnchorM,
+    move: move,
+    shorten: shorten,
+    normalize: normalize,
+    cellPolygon: cellPolygon,
+    nearestAnchor: nearestAnchor,
+    toGrid: toGrid,
+    fromGrid: fromGrid,
+    // exposed for testing only
+    _internal: Object.freeze({ hypot: hypot, pyMod: pyMod, pyFloorDiv: pyFloorDiv, pyRound: pyRound, formatFixed: formatFixed,
+                               geodesicInverse: geodesicInverse, geodesicDirect: geodesicDirect })
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this));
