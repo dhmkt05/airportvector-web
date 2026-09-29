@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AirportVector for Logistics — the code is the delivery zone</title>
+  <meta name="description" content="AirportVector codes tell your system the nearest airport hub, the direction and the distance — so you can quote, zone and route a parcel before you geocode anything. Works in 234 countries and territories.">
+  <meta name="theme-color" content="#0f1216">
+  <link rel="canonical" href="https://airportvector.org/logistics">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://airportvector.org/logistics">
+  <meta property="og:title" content="AirportVector for Logistics — the code is the delivery zone">
+  <meta property="og:description" content="Nearest hub, direction and distance — inside the location code. Quote and zone parcels instantly, anywhere on Earth.">
+  <meta property="og:image" content="https://airportvector.org/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="page-logistics">
+  <a class="skip" href="#calc">Skip to the zone calculator</a>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="AirportVector home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4"/><path d="M8 24 L24 8 M24 8 H13 M24 8 V19" /></svg>
+      <span>Airport<b>Vector</b></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Live map</a>
+      <a href="#calc">Zone calculator</a>
+      <a href="#integrate">Integrate</a>
+      <a class="nav-gh" href="#pilot">Request a pilot</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="lx-hero" aria-labelledby="lx-title">
+      <p class="eyebrow"><span class="gate">FOR LOGISTICS</span> Couriers · express · last mile · e-commerce</p>
+      <h1 id="lx-title">The code <span class="hl">is</span> the<br>delivery zone.</h1>
+      <p class="lede">An AirportVector code already contains the <em>nearest airport hub</em>, the <em>direction</em> and the <em>distance</em>. Your system can quote, zone and route a parcel from the code alone — no geocoding call, no address clean-up.</p>
+
+      <div class="lx-ticket" aria-label="Example: reading a code as a shipment">
+        <div class="lx-ticket-code">DWC-<span class="l">D</span><span class="x">0225</span><span class="y">2036</span></div>
+        <dl class="lx-ticket-grid">
+          <div><dt>Hub</dt><dd>DWC · Al Maktoum, Dubai</dd></div>
+          <div><dt>Direction</dt><dd>North (NW quadrant)</dd></div>
+          <div><dt>Band</dt><dd>D · near, under 100 km</dd></div>
+          <div><dt>Distance</dt><dd>20.5 km → Zone 2</dd></div>
+        </dl>
+        <p class="lx-ticket-note">Read straight from the code — before any lookup.</p>
+      </div>
+
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#calc">Try the zone calculator</a>
+        <a class="btn btn-ghost" href="#pilot">Request a pilot</a>
+      </div>
+    </section>
+
+    <!-- WHY -->
+    <section class="lx-why" aria-labelledby="why-title">
+      <div class="section-head">
+        <h2 id="why-title"><span class="num">01</span> Why logistics teams care</h2>
+        <p>Pricing, hub assignment and driver hand-off all start with the same question: <em>how far is this from the hub?</em> AirportVector answers it inside the code.</p>
+      </div>
+      <div class="lx-cards">
+        <article>
+          <h3>Instant rate quotes</h3>
+          <p>√(X² + Y²) is the exact ground distance to the airport. Map it to your price bands at checkout — in microseconds, offline, with no geocoding bill.</p>
+        </article>
+        <article>
+          <h3>Automatic hub assignment</h3>
+          <p>The first three letters are the nearest commercial airport. Route the parcel to that hub, or to a hub you map it to.</p>
+        </article>
+        <article>
+          <h3>Unaddressed places</h3>
+          <p>Rural homes, new estates, construction sites, farms, beaches. If it has a GPS position, it has a code — even where no street address exists.</p>
+        </article>
+        <article>
+          <h3>Driver-friendly</h3>
+          <p>“NW of Trichy airport, about 5 km” makes sense to a person. Drivers can sanity-check a drop before they set off.</p>
+        </article>
+        <article>
+          <h3>One format, 234 countries</h3>
+          <p>4,133 commercial airports anchor every point on Earth. The same code format works across borders, oceans and remote regions.</p>
+        </article>
+        <article>
+          <h3>Runs on your servers</h3>
+          <p>Plain maths plus a small airport file. No per-lookup fees, no dependency on a third-party service to stay online.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- CALCULATOR -->
+    <section class="lx-calc" id="calc" aria-labelledby="calc-title">
+      <div class="section-head">
+        <h2 id="calc-title"><span class="num">02</span> Zone calculator</h2>
+        <p>Paste a list of AirportVector codes (one per line) and set your distance bands. Everything runs in your browser — nothing is uploaded.</p>
+      </div>
+
+      <div class="lx-calc-grid">
+        <div class="lx-in">
+          <label class="label" for="codes">Codes</label>
+          <textarea id="codes" rows="9" spellcheck="false">TRZ-D04200355
+TRZ-D02691098
+MAA-C07510720
+DWC-D02252036
+TRZ-D56497605
+LCY-D12710024
+DJG-F2590508465
+IPC-K104561248302</textarea>
+
+          <fieldset class="lx-zones">
+            <legend class="label">Your distance bands (km from hub)</legend>
+            <div class="lx-zone-row"><span class="zchip z1">Zone 1</span> up to <input type="number" id="z1" value="15" min="0" step="1" inputmode="numeric"> km</div>
+            <div class="lx-zone-row"><span class="zchip z2">Zone 2</span> up to <input type="number" id="z2" value="50" min="0" step="1" inputmode="numeric"> km</div>
+            <div class="lx-zone-row"><span class="zchip z3">Zone 3</span> up to <input type="number" id="z3" value="150" min="0" step="1" inputmode="numeric"> km</div>
+            <div class="lx-zone-row"><span class="zchip z4">Zone 4</span> up to <input type="number" id="z4" value="500" min="0" step="1" inputmode="numeric"> km</div>
+            <div class="lx-zone-row"><span class="zchip z5">Remote</span> beyond that</div>
+          </fieldset>
+          <div class="actions">
+            <button type="button" class="btn btn-primary btn-small" id="runBtn">Calculate zones</button>
+            <button type="button" class="btn btn-ghost btn-small" id="csvBtn" disabled>Copy as CSV</button>
+          </div>
+        </div>
+
+        <div class="lx-out">
+          <p class="label">Results</p>
+          <div class="lx-table-wrap">
+            <table class="lx-table" id="outTable">
+              <thead><tr><th>Code</th><th>Hub</th><th>Direction</th><th>Locality</th><th>Distance</th><th>Zone</th></tr></thead>
+              <tbody id="outBody"><tr><td colspan="6" class="muted">Loading airport list…</td></tr></tbody>
+            </table>
+          </div>
+          <p class="lx-summary" id="summary"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW -->
+    <section class="lx-how" aria-labelledby="how-title">
+      <div class="section-head">
+        <h2 id="how-title"><span class="num">03</span> How it fits your flow</h2>
+      </div>
+      <ol class="lx-steps">
+        <li><b>Capture</b><span>Customer shares a code — from our site, your app's “use my location” button, or typed on a form.</span></li>
+        <li><b>Zone &amp; quote</b><span>Your system reads hub + distance from the code and applies your rate card instantly.</span></li>
+        <li><b>Assign &amp; route</b><span>The parcel goes to the hub in the code (or your mapped depot). Decode to lat/lon for turn-by-turn.</span></li>
+        <li><b>Deliver</b><span>The driver sees “5.5 km NW of TRZ” plus the exact pin — a human check and a precise target.</span></li>
+      </ol>
+    </section>
+
+    <!-- COMPARE -->
+    <section class="lx-compare" aria-labelledby="cmp-title">
+      <div class="section-head">
+        <h2 id="cmp-title"><span class="num">04</span> Compared with what you use today</h2>
+      </div>
+      <div class="lx-table-wrap">
+        <table class="lx-table lx-cmp">
+          <thead>
+            <tr><th></th><th>Street address</th><th>Latitude / longitude</th><th>Generic grid codes</th><th class="us">AirportVector</th></tr>
+          </thead>
+          <tbody>
+            <tr><th>Works where there's no address</th><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes us">Yes</td></tr>
+            <tr><th>A person can read roughly where it is</th><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="yes us">Yes</td></tr>
+            <tr><th>Tells you the nearest hub</th><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="yes us">Yes</td></tr>
+            <tr><th>Tells you the distance (for zoning)</th><td class="no">No</td><td class="part">After calculation</td><td class="no">No</td><td class="yes us">Yes, exact</td></tr>
+            <tr><th>Needs a lookup service</th><td class="no">Geocoder</td><td class="yes">No</td><td class="part">Varies</td><td class="yes us">No</td></tr>
+            <tr><th>Short to type or say</th><td class="part">Long</td><td class="no">Long</td><td class="yes">Yes</td><td class="yes us">Yes (10–17 chars)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- INTEGRATE -->
+    <section class="lx-int" id="integrate" aria-labelledby="int-title">
+      <div class="section-head">
+        <h2 id="int-title"><span class="num">05</span> Integrate in an afternoon</h2>
+        <p>Reference libraries in Python and JavaScript, tested against each other on 78,000+ cases. A hosted API is available to pilot partners.</p>
+      </div>
+      <div class="dev-grid">
+        <div class="snippet">
+          <div class="snippet-head"><span>Python</span><span>rate quote</span></div>
+<pre><code>import airportvector as av
+
+def zone_for(code, bands=(15, 50, 150, 500)):
+    km = av.distance_from_anchor_m(code) / 1000
+    hub = av.parse(code).anchor
+    zone = next((i + 1 for i, b in enumerate(bands) if km &lt;= b), 5)
+    return hub, round(km, 1), zone
+
+zone_for("TRZ-D04200355")   # ('TRZ', 5.5, 1)</code></pre>
+        </div>
+        <div class="snippet">
+          <div class="snippet-head"><span>JavaScript</span><span>checkout</span></div>
+<pre><code>OAVG.loadRegistry(await (await fetch("/anchors.json")).json());
+
+const code = OAVG.normalize(input.value);   // validates
+const km   = OAVG.distanceFromAnchorM(code) / 1000;
+const hub  = OAVG.parse(code).anchor;       // "TRZ"
+const pin  = OAVG.decode(code);             // {lat, lon}</code></pre>
+        </div>
+      </div>
+      <div class="dev-links">
+        <a class="btn btn-ghost" href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub repository ↗</a>
+        <a class="btn btn-ghost" href="/spec-v2.1.pdf">Specification v2.1 (PDF)</a>
+      </div>
+    </section>
+
+    <!-- PILOT -->
+    <section class="lx-pilot" id="pilot" aria-labelledby="pilot-title">
+      <div class="lx-pilot-box">
+        <h2 id="pilot-title">Pilot partners wanted</h2>
+        <p>We're working with a small number of couriers and delivery platforms to measure the impact on real routes.</p>
+        <div class="lx-pilot-grid">
+          <div>
+            <h3>You get</h3>
+            <ul>
+              <li>Hosted API access during the pilot</li>
+              <li>Help mapping codes to your hubs and rate card</li>
+              <li>A “share my location code” link for your customers</li>
+            </ul>
+          </div>
+          <div>
+            <h3>We measure together</h3>
+            <ul>
+              <li>Time to quote and assign a parcel</li>
+              <li>Failed or delayed first-attempt deliveries</li>
+              <li>Driver calls to customers for directions</li>
+            </ul>
+          </div>
+        </div>
+        <a class="btn btn-primary" id="pilotBtn" href="mailto:pilot@airportvector.org?subject=AirportVector%20logistics%20pilot">Request a pilot</a>
+        <p class="small">Draft specification v2.1. Airport coordinates are being verified against official sources before a stable release.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4"/><path d="M8 24 L24 8 M24 8 H13 M24 8 V19" /></svg><span>Airport<b>Vector</b></span></a>
+        <p class="small">Airport-anchored location codes · draft specification v2.1.</p>
+        <p class="small warn">Not for navigation, aviation or emergency-services use.</p>
+      </div>
+      <div class="small">
+        <p><a href="/">Live map</a> · <a href="/logistics">For logistics</a> · <a href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub</a></p>
+        <p>Airport data: <a href="https://ourairports.com/" rel="noopener">OurAirports</a> (public domain). Locality names (Tamil Nadu pilot): India Post All India Pincode Directory via <a href="https://www.data.gov.in/" rel="noopener">data.gov.in</a>, Government Open Data License – India.</p>
+        <p>Code: Business Source License 1.1.</p>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/oavg.js" defer></script>
+  <script src="/logistics.js" defer></script>
+</body>
+</html>

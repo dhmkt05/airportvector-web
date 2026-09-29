@@ -135,6 +135,30 @@
     document.body.classList.add("has-code");
     syncSheet();
     drawOnMap(p, a, centre, opts.fly !== false);
+    loadLocality(p.code);
+  }
+
+  /* ---------------------------------------------------------------- locality (India Post, pilot) */
+  var locSeq = 0, locTimer = null;
+  function loadLocality(code) {
+    var el = $("locality");
+    var seq = ++locSeq;
+    el.hidden = true; el.textContent = "";
+    clearTimeout(locTimer);
+    locTimer = setTimeout(function () {
+      fetch("/api/v1/locality?code=" + encodeURIComponent(code))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (seq !== locSeq || !d || !d.locality) return;
+          var l = d.locality;
+          el.textContent = "\uD83D\uDCCD " + (l.relation === "in" ? "" : "Near ") + l.name + " " + l.pin +
+            " \u00B7 " + l.district;
+          el.title = l.distance_km + " km from the post office \u00B7 Source: India Post";
+          el.hidden = false;
+          syncSheet();
+        })
+        .catch(function () { /* locality is optional */ });
+    }, 250);
   }
 
   function fromPoint(lat, lon, opts) {

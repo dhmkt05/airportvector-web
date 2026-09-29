@@ -17,3 +17,6 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Raw source data (large, re-downloadable) - never commit
+data-raw/
