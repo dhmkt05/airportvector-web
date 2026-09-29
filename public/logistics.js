@@ -81,8 +81,9 @@
     if (!(code in locCache)) return "<span class=\"muted\">…</span>";
     var v = locCache[code];
     if (!v) return "<span class=\"muted\">—</span>";
-    var m = /^(.*) (\d{6})$/.exec(v);   // "Name 620001" -> name + PIN (PIN hidden on phones)
-    return m ? esc(m[1]) + " <span class=\"pin\">" + m[2] + "</span>" : esc(v);
+    // "Olaiyur, K. Sathanur PO 620021" -> village + (PO + PIN, hidden on phones)
+    var m = /^(.*?)((?:,\s*[^,]*?)?(?:\s+PO)?\s+\d{6})$/.exec(v);
+    return m ? esc(m[1]) + "<span class=\"pin\">" + esc(m[2]) + "</span>" : esc(v);
   }
   function fillLocalities() {
     var seq = ++runSeq;
@@ -101,8 +102,7 @@
       fetch("/api/v1/locality?code=" + encodeURIComponent(code))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
-          var l = d && d.locality;
-          locCache[code] = l ? (l.relation === "in" ? "" : "near ") + l.name + " " + l.pin : "";
+          locCache[code] = (d && d.label) || "";
         }, function () { locCache[code] = ""; })
         .then(function () { paint(code); next(); });
     }

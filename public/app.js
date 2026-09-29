@@ -149,11 +149,13 @@
       fetch("/api/v1/locality?code=" + encodeURIComponent(code))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
-          if (seq !== locSeq || !d || !d.locality) return;
-          var l = d.locality;
-          el.textContent = "\uD83D\uDCCD " + (l.relation === "in" ? "" : "Near ") + l.name + " " + l.pin +
-            " \u00B7 " + l.district;
-          el.title = l.distance_km + " km from the post office \u00B7 Source: India Post";
+          if (seq !== locSeq || !d || (!d.place && !d.postal)) return;
+          var pl = d.place, po = d.postal, lines = [];
+          if (pl) lines.push("\uD83D\uDCCD " + (pl.relation === "in" ? "" : "Near ") + pl.name +
+                             (pl.name_ta && pl.name_ta !== pl.name ? " \u00B7 " + pl.name_ta : ""));
+          if (po) lines.push("\u2709\uFE0F " + po.name + " PO " + po.pin + " \u00B7 " + po.district);
+          el.textContent = lines.join("\n");
+          el.title = "Places: OpenStreetMap \u00B7 Post offices: India Post";
           el.hidden = false;
           syncSheet();
         })

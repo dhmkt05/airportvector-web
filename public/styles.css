@@ -200,7 +200,7 @@ main > section > * { max-width: var(--maxw); margin-left: auto; margin-right: au
 .search-error { margin: -8px 0 0; color: #ff8a7a; font-size: 14px; }
 .flap-panel { margin-bottom: 10px; }
 .describe { margin: 6px 0 0; font-size: 16px; color: #d4d9df; min-height: 1.5em; }
-.locality { margin: 4px 0 0; font-size: 14px; color: #ffd23f; }
+.locality { margin: 4px 0 0; font-size: 14px; color: #ffd23f; white-space: pre-line; line-height: 1.45; }
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 16px 0 0; }
 .facts div { background: var(--ink-3); border-radius: 8px; padding: 9px 11px; }
 .facts .wide { grid-column: 1 / -1; }

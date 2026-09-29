@@ -25,8 +25,12 @@ INDIA = (6.0, 37.2, 68.0, 97.5)
 SUFFIX = re.compile(r"\s+(?:g\.?\s?p\.?\s?o|s\.?\s?o|b\.?\s?o|h\.?\s?o|mdg|ndtso)\b.*$", re.I)
 
 
+INITIALS = re.compile(r"^([A-Z]{1,3})(?=[A-Z][a-z])")   # India Post glues initials: "KSathanur", "KCPatti"
+
+
 def clean_name(raw: str) -> str:
     name = SUFFIX.sub("", raw.strip()).strip(" .,-")
+    name = INITIALS.sub(lambda m: ".".join(m.group(1)) + ". ", name)   # -> "K. Sathanur", "K.C. Patti"
     if name.isupper() or name.islower():
         name = name.title()
     return re.sub(r"\s{2,}", " ", name)
