@@ -1,4 +1,4 @@
-// GET /api/v1/locality?code=TRZ-D04200355      or   ?lat=10.795&lon=78.679[&precision=10m]
+// GET /api/v1/locality?code=TRZ-55511-79566    or   ?lat=10.795&lon=78.679[&precision=4m]
 // Returns, for a code or point (Tamil Nadu pilot):
 //   place  - the village / hamlet / neighbourhood it is in (OpenStreetMap)   <- what a rider needs
 //   postal - the nearest post office + PIN (India Post)                       <- what the post needs
@@ -85,9 +85,9 @@ function handler(req, res) {
       ({ lat, lon } = OAVG.decode(code));
     } else if (q.get("lat") !== null && q.get("lon") !== null) {
       lat = Number(q.get("lat")); lon = Number(q.get("lon"));
-      code = OAVG.encode(lat, lon, q.get("precision") || "10m");
+      code = OAVG.encode(lat, lon, q.get("precision") || "4m");
     } else {
-      return send(res, 400, { error: "Pass ?code=TRZ-D04200355 or ?lat=..&lon=.." });
+      return send(res, 400, { error: "Pass ?code=TRZ-55511-79566 or ?lat=..&lon=.." });
     }
     const p = OAVG.parse(code);
     const a = OAVG.getAnchor(p.anchor);
@@ -113,6 +113,7 @@ function handler(req, res) {
     }
     return send(res, 200, {
       code,
+      display: p.display,
       code_1km: OAVG.shorten(code, "1km"),
       lat: round(lat, 6), lon: round(lon, 6),
       airport: { code: a.code, name: a.name, distance_km: round(Math.hypot(g.x, g.y) / 1000, 2),

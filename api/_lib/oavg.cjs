@@ -6,20 +6,19 @@ var __root = {};
 // Commercial SaaS hosting or paid API distribution is strictly prohibited.
 // See LICENSE.md in the root directory for full terms.
 /*
- * oavg.js - browser port of AirportVector (Open Airport Vector Grid, OAVG v2.1).
+ * oavg.js - browser port of AirportVector (Open Airport Vector Grid, OAVG v4).
  *
  * Faithful, dependency-free port of the Python reference implementation
- * airportvector.py v2.1.1. Plain ES2019 script: defines the global `OAVG`.
+ * airportvector 4.0.0. Plain ES2019 script: defines the global `OAVG`.
  *
- *     TRZ-D04200355  =  Trichy airport, North-West (near band),
- *                       X = 0420 (4,200 m West), Y = 0355 (3,550 m North), 10 m cell
+ *     TRZ 55511 79566  =  Trichy airport, then 10 phone-keypad digits (about 4 m)
  *
- *     A B C D  = NE SE SW NW, under 100 km
- *     E F G H  = NE SE SW NW, 100 - 999 km      (+1 digit per axis)
- *     I J K L  = NE SE SW NW, 1,000 - 9,999 km  (+2 digits per axis)
+ *     1 2 3      NW  N  NE     Every square splits 3 x 3, named like a phone keypad.
+ *     4 5 6  =   W   *   E     5 is always the part that holds the airport.
+ *     7 8 9      SW  S  SE     First group = 1 km square, second group = inside it.
  *
  * Usage:  OAVG.loadRegistry(await (await fetch('anchors.json')).json());
- *         OAVG.encode(10.7950461, 78.679302)  // "TRZ-D04200355"
+ *         OAVG.encode(10.7950461, 78.679302)  // "TRZ-55511-79566"
  *
  * Python semantics reproduced on purpose: float `%` and `//` (sign of divisor,
  * fmod-based), round-half-even in number formatting and round(x, n).
@@ -30,17 +29,17 @@ var __root = {};
   // ------------------------------------------------------------------------
   // Constants
   // ------------------------------------------------------------------------
-  var VERSION = '2.1.1';
-  var SPEC_VERSION = '2.1';
-  /** precision name -> base digits per axis. Cell size = 10 ** (5 - base) metres. */
-  var PRECISIONS = { '1km': 2, '100m': 3, '10m': 4, '1m': 5 };
-  var PRECISION_NAME = { 2: '1km', 3: '100m', 4: '10m', 5: '1m' };
-  var DEFAULT_PRECISION = '10m';
-  var SECTORS = 'ABCD';            // NE, SE, SW, NW (clockwise)
-  var MAX_BAND = 2;                // bands 0..2 -> letters A..L
-  var LETTERS = 'ABCDEFGHIJKL';
-  var BAND_LIMIT_M = [100000, 1000000, 10000000];  // band b: max(|X|,|Y|) < limit
-  var CODE_RE = /^([A-Z]{3})-([A-L])([0-9]+)(?:\.([0-9]+))?$/;
+  var VERSION = '4.0.0';
+  var SPEC_VERSION = '4.0';
+  /** precision name -> number of digits in the second group. Cell = 1000 / 3**n metres. */
+  var PRECISIONS = { '1km': 0, '333m': 1, '111m': 2, '37m': 3, '12m': 4, '4m': 5 };
+  var PRECISION_NAME = { 0: '1km', 1: '333m', 2: '111m', 3: '37m', 4: '12m', 5: '4m' };
+  var DEFAULT_PRECISION = '4m';
+  var BASE_ZONE_M = 243000;   // the 5-digit zone: 243 km square centred on the airport
+  var COARSE_DIGITS = 5;      // first group, inside the base zone (ends at 1 km)
+  var FINE_DIGITS = 5;        // second group at full precision
+  var MAX_EXTRA = 4;          // up to 4 implied outer levels: 19,683 km zone
+  var CODE_RE = /^([A-Z]{3})[ -]*([0-9]+)(?:[ .-]+([0-9]+))?$/;
   var STATUSES = ['active', 'retired'];
   var COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
                  'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -370,46 +369,68 @@ var __root = {};
   // ------------------------------------------------------------------------
   // Codes
   // ------------------------------------------------------------------------
-  function pad(n, d) { var s = String(n); while (s.length < d) s = '0' + s; return s; }
+  function pow3(k) { var p = 1; for (var i = 0; i < k; i++) p *= 3; return p; }
 
-  function makeCode(anchor, sector, band, x, y, base) {
-    var d = base + band;
-    var letter = LETTERS[SECTORS.indexOf(sector) + 4 * band];
+  function makeCode(anchor, coarse, fine) {
+    var extra = coarse.length - COARSE_DIGITS, lead = 0;
+    while (lead < coarse.length && coarse.charAt(lead) === '5') lead++;
     return {
-      anchor: anchor, sector: sector, band: band, letter: letter, x: x, y: y, base: base,
-      digits: d, cellSize: Math.pow(10, 5 - base), precision: PRECISION_NAME[base],
-      code: anchor + '-' + letter + pad(x, d) + pad(y, d),
-      display: anchor + '-' + letter + pad(x, d) + '.' + pad(y, d)
+      anchor: anchor, coarse: coarse, fine: fine, extra: extra, levels: coarse.length + fine.length,
+      zoneM: BASE_ZONE_M * pow3(extra), cellSize: 1000 / pow3(fine.length), fineDigits: fine.length,
+      precision: PRECISION_NAME[fine.length], leadingFives: lead,
+      code: anchor + '-' + coarse + (fine ? '-' + fine : ''),
+      display: anchor + ' ' + coarse + (fine ? ' ' + fine : '')
     };
   }
 
-  function baseFor(precision) {
-    if (typeof precision === 'number' && Number.isInteger(precision) && PRECISION_NAME[precision]) return precision;
+  function fineFor(precision) {
+    if (typeof precision === 'number' && Number.isInteger(precision) && PRECISION_NAME[precision] !== undefined) return precision;
     var key = String(precision).toLowerCase().replace(/ /g, '');
     if (!Object.prototype.hasOwnProperty.call(PRECISIONS, key)) {
-      throw new OAVGError('Unknown precision ' + pyRepr(precision) + "; use one of ['1km', '100m', '10m', '1m']");
+      throw new OAVGError('Unknown precision ' + pyRepr(precision) + "; use one of ['1km', '333m', '111m', '37m', '12m', '4m']");
     }
     return PRECISIONS[key];
   }
 
-  // Tie rule: exactly zero counts as East / North.
-  function sectorOf(x, y) { return x >= 0 ? (y >= 0 ? 'A' : 'B') : (y >= 0 ? 'D' : 'C'); }
-
-  function bandOf(ax, ay) {
-    if (!(isFinite(ax) && isFinite(ay))) throw new OAVGError('Grid distances must be finite numbers');
-    var m = Math.max(ax, ay);
-    for (var b = 0; b <= MAX_BAND; b++) if (m < BAND_LIMIT_M[b]) return b;
-    throw new OAVGError('Location is ' + formatFixed(m / 1000, 3, true) + ' km from the anchor on one axis; ' +
-      'it must be under ' + formatFixed(BAND_LIMIT_M[MAX_BAND] / 1000, 0, true) + ' km');
+  /** Smallest number of implied outer levels whose zone contains (x, y). */
+  function extraFor(x, y) {
+    if (!(isFinite(x) && isFinite(y))) throw new OAVGError('Grid distances must be finite numbers');
+    var m = Math.max(Math.abs(x), Math.abs(y));
+    for (var e = 0; e <= MAX_EXTRA; e++) if (m < BASE_ZONE_M * pow3(e) / 2) return e;
+    throw new OAVGError('Location is ' + formatFixed(m / 1000, 3, true) + ' km from the anchor on one axis; out of range');
   }
 
-  /** Encode grid metres (X, Y) from an anchor. Truncates (never rounds). */
+  /** Column (from the west edge) and row (from the north edge) -> keypad digits. */
+  function digitsFromIndex(col, row, levels) {
+    var out = '';
+    for (var k = levels - 1; k >= 0; k--) {
+      var p = pow3(k);
+      out += String((Math.floor(row / p) % 3) * 3 + (Math.floor(col / p) % 3) + 1);
+    }
+    return out;
+  }
+
+  function indexFromDigits(digits) {
+    var col = 0, row = 0;
+    for (var i = 0; i < digits.length; i++) {
+      var d = digits.charCodeAt(i) - 49;
+      col = col * 3 + (d % 3);
+      row = row * 3 + Math.floor(d / 3);
+    }
+    return [col, row];
+  }
+
+  /** Encode grid metres (X east, Y north) from an anchor. Truncates (never rounds). */
   function encodeGrid(anchor, x, y, precision) {
     var a = getAnchor(anchor);
-    var base = baseFor(precision === undefined ? DEFAULT_PRECISION : precision);
-    var band = bandOf(Math.abs(x), Math.abs(y));
-    var cell = Math.pow(10, 5 - base);
-    return makeCode(a.code, sectorOf(x, y), band, pyFloorDiv(Math.abs(x), cell), pyFloorDiv(Math.abs(y), cell), base).code;
+    var fine = fineFor(precision === undefined || precision === null ? DEFAULT_PRECISION : precision);
+    var extra = extraFor(x, y);
+    var levels = COARSE_DIGITS + extra + fine;
+    var n = pow3(levels), zone = BASE_ZONE_M * pow3(extra), half = zone / 2;
+    var col = Math.min(n - 1, Math.max(0, Math.floor((x + half) * n / zone)));
+    var row = n - 1 - Math.min(n - 1, Math.max(0, Math.floor((y + half) * n / zone)));
+    var digits = digitsFromIndex(col, row, levels), split = COARSE_DIGITS + extra;
+    return makeCode(a.code, digits.slice(0, split), digits.slice(split)).code;
   }
 
   /** Canonical anchor: nearest ACTIVE airport by true ground distance; exact ties alphabetical. */
@@ -446,7 +467,8 @@ var __root = {};
     return { code: a.code, name: a.name, lat: a.lat, lon: a.lon };
   }
 
-  /** lat/lon (degrees, WGS84) -> OAVG code. precision: "1km" | "100m" | "10m" (default) | "1m". */
+  /** lat/lon (degrees, WGS84) -> OAVG code, e.g. "TRZ-55511-79566".
+   *  precision: "1km" | "333m" | "111m" | "37m" | "12m" | "4m" (default). */
   function encode(lat, lon, precision, anchor) {
     if (precision === undefined || precision === null) precision = DEFAULT_PRECISION;
     var a;
@@ -460,60 +482,45 @@ var __root = {};
     return encodeGrid(a.code, g.x, g.y, precision);
   }
 
-  /** Validate and split a code. Accepts any letter case and the dotted display form. */
+  /** Validate and split a code. Accepts any case and spaces, hyphens or dots between groups.
+   *  One block of 10+ digits is a full code (last 5 = second group); fewer = first group only. */
   function parse(code) {
     if (typeof code !== 'string') throw new OAVGError('Code must be a string');
     var cps = Array.from(code);
     if (!/^[\x00-\x7f]*$/.test(code) || cps.length > 40) {
-      throw new OAVGError('Invalid OAVG code ' + pyRepr(cps.slice(0, 40).join('')) + ": use only A-Z, 0-9, '-' and '.'");
+      throw new OAVGError('Invalid OAVG code ' + pyRepr(cps.slice(0, 40).join('')) + ": use only A-Z, 1-9, spaces and '-'");
     }
     var m = CODE_RE.exec(pyStrip(code).toUpperCase());
-    if (!m) throw new OAVGError('Invalid OAVG code ' + pyRepr(code) + '. Expected e.g. TRZ-D04200355');
-    var anchor = m[1], letter = m[2], first = m[3], second = m[4], digits;
-    if (second !== undefined) {
-      if (first.length !== second.length) throw new OAVGError('Invalid code ' + pyRepr(code) + ': X and Y must have the same number of digits');
-      digits = first + second;
-    } else {
-      digits = first;
+    if (!m) throw new OAVGError('Invalid OAVG code ' + pyRepr(code) + '. Expected e.g. TRZ 55511 79566');
+    var anchor = m[1], coarse = m[2], fine = m[3];
+    if (fine === undefined) {
+      if (coarse.length >= COARSE_DIGITS + FINE_DIGITS) { fine = coarse.slice(-FINE_DIGITS); coarse = coarse.slice(0, -FINE_DIGITS); }
+      else fine = '';
     }
-    var idx = LETTERS.indexOf(letter);
-    var sector = SECTORS[idx % 4], band = Math.floor(idx / 4);
-    if (digits.length % 2) throw new OAVGError('Invalid code ' + pyRepr(code) + ': odd number of digits');
-    var d = digits.length / 2;
-    var base = d - band;
-    if (!PRECISION_NAME[base]) {
-      throw new OAVGError('Invalid code ' + pyRepr(code) + ': sector ' + letter + ' needs ' + (2 + band) + '-' + (5 + band) +
-        ' digits per axis (got ' + d + ')');
+    if ((coarse + fine).indexOf('0') >= 0) throw new OAVGError('Invalid code ' + pyRepr(code) + ': OAVG digits are 1-9 (0 is never used)');
+    if (coarse.length < COARSE_DIGITS || coarse.length > COARSE_DIGITS + MAX_EXTRA) {
+      throw new OAVGError('Invalid code ' + pyRepr(code) + ': the first group needs ' + COARSE_DIGITS + '-' +
+        (COARSE_DIGITS + MAX_EXTRA) + ' digits (got ' + coarse.length + ')');
     }
-    var x = parseInt(digits.slice(0, d), 10), y = parseInt(digits.slice(d), 10);
-    if (band > 0 && Math.max(x, y) < Math.pow(10, d - 1)) {
-      throw new OAVGError('Invalid code ' + pyRepr(code) + ': this location belongs in a nearer band ' +
-        '(use letter ' + LETTERS[SECTORS.indexOf(sector) + 4 * (band - 1)] + ')');
+    if (fine.length > FINE_DIGITS) {
+      throw new OAVGError('Invalid code ' + pyRepr(code) + ': the second group has at most ' + FINE_DIGITS + ' digits (got ' + fine.length + ')');
     }
+    // implied 5s: a longer first group that starts with 5 is the same place written long
+    while (coarse.length > COARSE_DIGITS && coarse.charAt(0) === '5') coarse = coarse.slice(1);
     getAnchor(anchor);  // throws if unknown
-    return makeCode(anchor, sector, band, x, y, base);
+    return makeCode(anchor, coarse, fine);
   }
 
-  // Signed cell index: West/South cells are numbered -X-1 so cell 0 and -1 touch the axis.
-  function signedIndex(c) {
-    var i = (c.sector === 'A' || c.sector === 'B') ? c.x : -c.x - 1;
-    var j = (c.sector === 'A' || c.sector === 'D') ? c.y : -c.y - 1;
-    return [i, j];
-  }
-
-  function fromIndex(anchor, i, j, base) {
-    var x = i >= 0 ? i : -i - 1;
-    var y = j >= 0 ? j : -j - 1;
-    var cell = Math.pow(10, 5 - base);
-    var band = bandOf(x * cell, y * cell);   // a cell never straddles a band edge
-    var sector = i >= 0 ? (j >= 0 ? 'A' : 'B') : (j >= 0 ? 'D' : 'C');
-    return makeCode(anchor, sector, band, x, y, base);
+  /** [col, row, cell size m, half zone m] for a parsed code. */
+  function cellIndex(c) {
+    var ij = indexFromDigits(c.coarse + c.fine), n = pow3(c.levels);
+    return [ij[0], ij[1], c.zoneM / n, c.zoneM / 2];
   }
 
   /** Code -> {anchor, x, y} of the cell centre, in metres. */
   function decodeGrid(code) {
-    var c = parse(code), ij = signedIndex(c), size = c.cellSize;
-    return { anchor: c.anchor, x: (ij[0] + 0.5) * size, y: (ij[1] + 0.5) * size };
+    var c = parse(code), k = cellIndex(c), s = k[2], half = k[3];
+    return { anchor: c.anchor, x: (k[0] + 0.5) * s - half, y: half - (k[1] + 0.5) * s };
   }
 
   /** Code -> {lat, lon} of the cell centre (full precision; Python rounds to 6 by default). */
@@ -524,34 +531,46 @@ var __root = {};
 
   /** Cell's 4 corners as [lat, lon], grid order (-X,-Y), (+X,-Y), (+X,+Y), (-X,+Y). */
   function cellPolygon(code) {
-    var c = parse(code), ij = signedIndex(c), s = c.cellSize, i = ij[0], j = ij[1];
-    return [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(function (g) {
-      var p = fromGrid(c.anchor, g[0] * s, g[1] * s);
+    var c = parse(code), k = cellIndex(c), s = k[2], half = k[3];
+    var w = k[0] * s - half, e = (k[0] + 1) * s - half, nn = half - k[1] * s, so = half - (k[1] + 1) * s;
+    return [[w, so], [e, so], [e, nn], [w, nn]].map(function (g) {
+      var p = fromGrid(c.anchor, g[0], g[1]);
       return [p.lat, p.lon];
     });
   }
 
-  /** Shift a code by whole cells (negative = West / South). Handles sector and band changes. */
+  /** Shift a code by whole cells of its own size (negative = West / South). */
   function move(code, eastCells, northCells) {
     if (eastCells === undefined) eastCells = 0;
     if (northCells === undefined) northCells = 0;
     [eastCells, northCells].forEach(function (v) {
       if (typeof v !== 'number' || !Number.isInteger(v)) throw new OAVGError('Cells to move must be whole numbers, got ' + pyRepr(v));
     });
-    var c = parse(code), ij = signedIndex(c);
-    return fromIndex(c.anchor, ij[0] + eastCells, ij[1] + northCells, c.base).code;
+    var c = parse(code), k = cellIndex(c), s = k[2], half = k[3];
+    var x = (k[0] + eastCells + 0.5) * s - half;
+    var y = half - (k[1] - northCells + 0.5) * s;
+    return encodeGrid(c.anchor, x, y, c.fine.length);
   }
 
-  /** Reduce precision by truncating each half, e.g. TRZ-D0420303554 -> TRZ-D04200355. */
+  /** The 8 cells around a code, same size, clockwise from North. */
+  function neighbors(code) {
+    return [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]].map(function (d) {
+      return move(code, d[0], d[1]);
+    });
+  }
+
+  /** Reduce precision by dropping digits from the second group, e.g. TRZ-55511-79566 -> TRZ-55511. */
   function shorten(code, precision) {
-    var c = parse(code), base = baseFor(precision);
-    if (base > c.base) throw new OAVGError('Cannot add precision that the code does not have');
-    var cut = Math.pow(10, c.base - base);
-    return makeCode(c.anchor, c.sector, c.band, Math.floor(c.x / cut), Math.floor(c.y / cut), base).code;
+    var c = parse(code), fine = fineFor(precision);
+    if (fine > c.fine.length) throw new OAVGError('Cannot add precision that the code does not have');
+    return makeCode(c.anchor, c.coarse, c.fine.slice(0, fine)).code;
   }
 
-  /** Canonical form: upper case, no dot. */
+  /** Canonical form for links and storage: upper case, groups joined by '-'. */
   function normalize(code) { return parse(code).code; }
+
+  /** Form for people: groups separated by spaces, e.g. 'TRZ 55511 79566'. */
+  function display(code) { return parse(code).display; }
 
   /** Exact ground distance (m) from the airport to the cell centre: sqrt(X^2 + Y^2). */
   function distanceFromAnchorM(code) { var g = decodeGrid(code); return hypot(g.x, g.y); }
@@ -592,8 +611,10 @@ var __root = {};
     distanceM: distanceM,
     distanceFromAnchorM: distanceFromAnchorM,
     move: move,
+    neighbors: neighbors,
     shorten: shorten,
     normalize: normalize,
+    display: display,
     cellPolygon: cellPolygon,
     nearestAnchor: nearestAnchor,
     toGrid: toGrid,

@@ -44,11 +44,11 @@
       <p class="lede">An AirportVector code already contains the <em>nearest airport hub</em>, the <em>direction</em> and the <em>distance</em>. Your system can quote, zone and route a parcel from the code alone — no geocoding call, no address clean-up.</p>
 
       <div class="lx-ticket" aria-label="Example: reading a code as a shipment">
-        <div class="lx-ticket-code">DWC-<span class="l">D</span><span class="x">0225</span><span class="y">2036</span></div>
+        <div class="lx-ticket-code">DWC <span class="x"><span class="l">5</span>2819</span> <span class="y">16159</span></div>
         <dl class="lx-ticket-grid">
           <div><dt>Hub</dt><dd>DWC · Al Maktoum, Dubai</dd></div>
-          <div><dt>Direction</dt><dd>North (NW quadrant)</dd></div>
-          <div><dt>Band</dt><dd>D · near, under 100 km</dd></div>
+          <div><dt>Direction</dt><dd>2 = North</dd></div>
+          <div><dt>Leading 5s</dt><dd>One 5 · within 40 km</dd></div>
           <div><dt>Distance</dt><dd>20.5 km → Zone 2</dd></div>
         </dl>
         <p class="lx-ticket-note">Read straight from the code — before any lookup.</p>
@@ -104,14 +104,14 @@
       <div class="lx-calc-grid">
         <div class="lx-in">
           <label class="label" for="codes">Codes</label>
-          <textarea id="codes" rows="9" spellcheck="false">TRZ-D04200355
-TRZ-D02691098
-MAA-C07510720
-DWC-D02252036
-TRZ-D56497605
-LCY-D12710024
-DJG-F2590508465
-IPC-K104561248302</textarea>
+          <textarea id="codes" rows="9" spellcheck="false">TRZ 55511 79566
+TRZ 55218 65497
+MAA 55729 93623
+DWC 52819 16159
+TRZ 16813 44112
+LCY 55444 38173
+DJG 686479 26417
+IPC 84772643 65933</textarea>
 
           <fieldset class="lx-zones">
             <legend class="label">Your distance bands (km from hub)</legend>
@@ -192,7 +192,7 @@ def zone_for(code, bands=(15, 50, 150, 500)):
     zone = next((i + 1 for i, b in enumerate(bands) if km &lt;= b), 5)
     return hub, round(km, 1), zone
 
-zone_for("TRZ-D04200355")   # ('TRZ', 5.5, 1)</code></pre>
+zone_for("TRZ 55511 79566")   # ('TRZ', 5.5, 1)</code></pre>
         </div>
         <div class="snippet">
           <div class="snippet-head"><span>JavaScript</span><span>checkout</span></div>
@@ -206,7 +206,7 @@ const pin  = OAVG.decode(code);             // {lat, lon}</code></pre>
       </div>
       <div class="dev-links">
         <a class="btn btn-ghost" href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub repository ↗</a>
-        <a class="btn btn-ghost" href="/spec-v2.1.pdf">Specification v2.1 (PDF)</a>
+        <a class="btn btn-ghost" href="https://github.com/dhmkt05/airportvector/blob/main/docs/SPEC-v4.md" rel="noopener">Specification v4 ↗</a>
       </div>
     </section>
 
@@ -234,7 +234,7 @@ const pin  = OAVG.decode(code);             // {lat, lon}</code></pre>
           </div>
         </div>
         <a class="btn btn-primary" id="pilotBtn" href="mailto:pilot@airportvector.org?subject=AirportVector%20logistics%20pilot">Request a pilot</a>
-        <p class="small">Draft specification v2.1. Airport coordinates are being verified against official sources before a stable release.</p>
+        <p class="small">Draft specification v4. Airport coordinates are being verified against official sources before a stable release.</p>
       </div>
     </section>
   </main>
@@ -243,7 +243,7 @@ const pin  = OAVG.decode(code);             // {lat, lon}</code></pre>
     <div class="foot-grid">
       <div>
         <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4"/><path d="M8 24 L24 8 M24 8 H13 M24 8 V19" /></svg><span>Airport<b>Vector</b></span></a>
-        <p class="small">Airport-anchored location codes · draft specification v2.1.</p>
+        <p class="small">Airport-anchored location codes · draft specification v4.</p>
         <p class="small warn">Not for navigation, aviation or emergency-services use.</p>
       </div>
       <div class="small">

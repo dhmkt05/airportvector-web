@@ -3,26 +3,32 @@
   "use strict";
 
   var REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  var DIRS = { A: "North-East", B: "South-East", C: "South-West", D: "North-West" };
-  var BANDS = ["Near · under 100 km (A–D)", "Regional · 100–999 km (E–H)", "Far · 1,000–9,999 km (I–L)"];
-  var CELL = { "1km": "1 km × 1 km", "100m": "100 m × 100 m", "10m": "10 m × 10 m", "1m": "1 m × 1 m" };
+  var CHARSET = "123456789";
+  var DIRS = { N: "North", NNE: "North-North-East", NE: "North-East", ENE: "East-North-East", E: "East",
+               ESE: "East-South-East", SE: "South-East", SSE: "South-South-East", S: "South",
+               SSW: "South-South-West", SW: "South-West", WSW: "West-South-West", W: "West",
+               WNW: "West-North-West", NW: "North-West", NNW: "North-North-West" };
+  var COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  var FIVES = ["over 40 km", "within 40 km", "within 13.5 km", "within 4.5 km", "within 1.5 km", "within 500 m"];
+  var CELL = { "1km": "1 km × 1 km", "333m": "333 m × 333 m", "111m": "111 m × 111 m",
+               "37m": "37 m × 37 m", "12m": "12 m × 12 m", "4m": "4 m × 4 m" };
 
   var $ = function (id) { return document.getElementById(id); };
   var MOBILE = window.matchMedia("(max-width: 760px)");
-  var CODE_PATH = /^\/([A-Za-z]{3}-[A-La-l][0-9]{2,7}(?:\.?[0-9]{2,7}))\/?$/;
+  var CODE_PATH = /^\/([A-Za-z]{3}-[1-9]{5,9}(?:-[1-9]{1,5})?)\/?$/;
   function shareUrl(code) { return location.origin + "/" + code; }
   var state = { lat: null, lon: null, code: null, anchor: null, typedBase: null };
   var ready = false;
   var map = null, mapReady = false, pointMarker = null, airportMarker = null;
 
   /* ---------------------------------------------------------------- flap board */
-  function bandOf(code) {
-    try { return OAVG.parse(code).band; } catch (e) { return 0; }
+  // How many tiles (from index 4) are leading 5s: they light up, so "closer" is visible at a glance.
+  function fivesOf(text) {
+    try { return /^[A-Z]{3} [1-9]/.test(text) ? OAVG.parse(text).leadingFives : 0; } catch (e) { return 0; }
   }
 
   function renderFlap(el, text, animate) {
-    var band = /^[A-Z]{3}-[A-L]/.test(text) ? bandOf(text) : -1;
+    var fives = fivesOf(text);
     el.style.setProperty("--n", String(text.length));
     var old = el.children;
     // rebuild if length changed
@@ -37,10 +43,10 @@
     el.setAttribute("aria-label", text);
     Array.prototype.forEach.call(el.children, function (tile, i) {
       var ch = text.charAt(i);
-      tile.className = "tile" + (ch === "-" || ch === "." ? " dash" : "") +
-        (i === 4 && band >= 0 ? " letter b" + band : "");
+      var gap = ch === "-" || ch === "." || ch === " ";
+      tile.className = "tile" + (gap ? " dash" : "") + (i >= 4 && i < 4 + fives ? " five" : "");
       tile.setAttribute("aria-hidden", "true");
-      if (!animate || REDUCED || ch === "-" || tile.textContent === ch) { tile.textContent = ch; return; }
+      if (!animate || REDUCED || gap || tile.textContent === ch) { tile.textContent = ch; return; }
       var steps = 3 + ((i * 7) % 5);
       var n = 0;
       var timer = setInterval(function () {
@@ -54,11 +60,11 @@
 
   /* ---------------------------------------------------------------- hero */
   var HERO = [
-    { code: "TRZ-D04200355", place: "Near Trichy Central Bus Stand, India" },
-    { code: "LCY-D12710024", place: "Central London, United Kingdom" },
-    { code: "DJG-F2590508465", place: "Deep in the Sahara, Algeria" },
-    { code: "IPC-K104561248302", place: "Point Nemo — the ocean's pole of inaccessibility" },
-    { code: "USH-J000000392217", place: "The South Pole, Antarctica" }
+    { code: "TRZ 55511 79566", place: "Near Trichy Central Bus Stand, India" },
+    { code: "LCY 55444 38173", place: "Central London, United Kingdom" },
+    { code: "DJG 686479 26417", place: "Deep in the Sahara, Algeria" },
+    { code: "IPC 84772643 65933", place: "Point Nemo — the ocean's pole of inaccessibility" },
+    { code: "USH 822858828 82252", place: "The South Pole, Antarctica" }
   ];
   var heroIdx = 0;
   function heroShow(animate) {
@@ -82,7 +88,7 @@
   }
   function currentPrecision() {
     var r = document.querySelector('input[name="prec"]:checked');
-    return r ? r.value : "10m";
+    return r ? r.value : "4m";
   }
   function setPrecisionRadio(p) {
     var r = document.querySelector('input[name="prec"][value="' + p + '"]');
@@ -115,19 +121,26 @@
     var p = OAVG.parse(code);
     var a = OAVG.getAnchor(p.anchor);
     var centre = OAVG.decode(code);
-    state = { lat: lat, lon: lon, code: p.code, anchor: p.anchor,
-              typedBase: opts.typed ? p.base : (opts.keepTyped ? state.typedBase : null) };
+    var g = OAVG.decodeGrid(p.code);
+    var brg = (Math.atan2(g.x, g.y) * 180 / Math.PI + 360) % 360;
+    state = { lat: lat, lon: lon, code: p.code, display: p.display, anchor: p.anchor,
+              source: opts.source || (opts.keepTyped ? state.source : (opts.typed ? "typed" : "map")),
+              typedBase: opts.typed ? p.fineDigits : (opts.keepTyped ? state.typedBase : null) };
 
-    renderFlap($("panelFlap"), p.code, true);
+    renderFlap($("panelFlap"), p.display, true);
     $("describe").textContent = OAVG.describe(p.code);
     $("facts").hidden = false;
     $("fAirport").textContent = a.code + " · " + a.name;
-    $("fDir").textContent = DIRS[p.sector];
-    $("fBand").textContent = BANDS[p.band];
+    $("fDir").textContent = DIRS[COMPASS[Math.floor((brg + 11.25) / 22.5) % 16]];
+    $("fBand").textContent = p.extra > 0
+      ? "Long first group → over " + (121.5 * Math.pow(3, p.extra - 1)).toLocaleString("en-US") + " km"
+      : (p.leadingFives ? "5".repeat(p.leadingFives) + " → " : "No leading 5 → ") + FIVES[Math.min(p.leadingFives, 5)];
     $("fCell").textContent = CELL[p.precision];
     $("fCoord").textContent = fmt(centre.lat) + ", " + fmt(centre.lon);
     $("copyBtn").disabled = false;
     $("shareBtn").disabled = false;
+    $("saveBtn").disabled = false;
+    $("saveBtn").textContent = state.source === "gps" ? "Save my location" : "Save place";
     setPrecisionRadio(p.precision);
     showError(null);
 
@@ -270,6 +283,61 @@
     }
   }
 
+  /* ---------------------------------------------------------------- saved places (this device only) */
+  var SAVE_KEY = "av.places.v4", SAVE_MAX = 20;
+  function loadPlaces() {
+    try {
+      var v = JSON.parse(localStorage.getItem(SAVE_KEY) || "[]");
+      return Array.isArray(v) ? v.filter(function (x) { return x && typeof x.code === "string"; }) : [];
+    } catch (e) { return []; }
+  }
+  function storePlaces(list) {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(list.slice(0, SAVE_MAX))); return true; }
+    catch (e) { toast("Couldn't save on this browser (private mode?)"); return false; }
+  }
+  function savePlace() {
+    if (!state.code) return;
+    var list = loadPlaces().filter(function (x) { return x.code !== state.code; });
+    var name = state.source === "gps" ? "My location" : "Saved place " + (list.length + 1);
+    list.unshift({ code: state.code, name: name, at: Date.now() });
+    if (storePlaces(list)) { renderPlaces(); toast("Saved on this device"); }
+  }
+  function renderPlaces() {
+    var list = loadPlaces(), ul = $("savedList");
+    $("saved").hidden = list.length === 0;
+    ul.textContent = "";
+    list.forEach(function (item, idx) {
+      var disp;
+      try { disp = OAVG.display(item.code); } catch (e) { return; }   // skip anything no longer valid
+      var li = document.createElement("li");
+      var name = document.createElement("input");
+      name.type = "text"; name.value = item.name || "Saved place"; name.maxLength = 40;
+      name.setAttribute("aria-label", "Name for " + disp);
+      name.addEventListener("change", function () {
+        var l = loadPlaces(); if (l[idx]) { l[idx].name = name.value.trim() || "Saved place"; storePlaces(l); }
+      });
+      var open = document.createElement("button");
+      open.type = "button"; open.className = "saved-code"; open.textContent = disp;
+      open.title = "Show on the map";
+      open.addEventListener("click", function () {
+        try { fromCode(item.code); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
+      });
+      var cp = document.createElement("button");
+      cp.type = "button"; cp.className = "btn btn-small btn-ghost"; cp.textContent = "Copy";
+      cp.setAttribute("aria-label", "Copy " + disp);
+      cp.addEventListener("click", function () { copy(disp, "Code copied"); });
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "saved-del"; del.textContent = "×";
+      del.setAttribute("aria-label", "Remove " + (item.name || disp));
+      del.addEventListener("click", function () {
+        var l = loadPlaces(); l.splice(idx, 1); storePlaces(l); renderPlaces(); syncSheet();
+      });
+      li.appendChild(name); li.appendChild(open); li.appendChild(cp); li.appendChild(del);
+      ul.appendChild(li);
+    });
+    syncSheet();
+  }
+
   /* ---------------------------------------------------------------- wiring */
   function wire() {
     $("searchForm").addEventListener("submit", function (e) {
@@ -304,7 +372,8 @@
       });
     });
 
-    $("copyBtn").addEventListener("click", function () { copy(state.code, "Code copied"); });
+    $("copyBtn").addEventListener("click", function () { copy(state.display, "Code copied"); });
+    $("saveBtn").addEventListener("click", savePlace);
     $("shareBtn").addEventListener("click", function () { copy(shareUrl(state.code), "Share link copied"); });
     $("locateBtn").addEventListener("click", locateMe);
     $("locateFab").addEventListener("click", locateMe);
@@ -326,7 +395,8 @@
       fab.classList.remove("busy");
       var lat = pos.coords.latitude, lon = pos.coords.longitude;
       try {
-        fromPoint(lat, lon);
+        setPrecisionRadio("4m");                 // your own location: always the exact code
+        fromPoint(lat, lon, { source: "gps" });
         placePoint(lon, lat);
         $("mapHint").classList.add("gone");
         var acc = Math.round(pos.coords.accuracy || 0);
@@ -357,7 +427,7 @@
   function boot() {
     tickClock(); setInterval(tickClock, 15000);
     renderFlap($("heroFlap"), HERO[0].code, false);
-    renderFlap($("panelFlap"), MOBILE.matches ? "TAP-THE-MAP" : "CLICK-THE-MAP", false);
+    renderFlap($("panelFlap"), MOBILE.matches ? "TAP THE MAP" : "CLICK THE MAP", false);
     if (MOBILE.matches) {
       $("mapHint").textContent = "Tap anywhere on the map";
       $("searchInput").placeholder = "Paste a code or lat, lon";
@@ -371,6 +441,7 @@
       .then(function (rows) {
         OAVG.loadRegistry(rows);
         ready = true;
+        renderPlaces();
         heroShow(false);
         setInterval(function () { heroIdx = (heroIdx + 1) % HERO.length; heroShow(true); }, 5200);
         var m = location.pathname.match(CODE_PATH);

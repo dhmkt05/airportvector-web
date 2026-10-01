@@ -516,3 +516,32 @@ main > section > * { max-width: var(--maxw); margin-left: auto; margin-right: au
   .lx-out .lx-table td.km { font-size: 12px; white-space: nowrap; }
   .lx-out .lx-table th, .lx-out .lx-table td { padding-left: 4px; padding-right: 4px; }
 }
+
+/* ---------- OAVG v4: keypad grid ---------- */
+.tile.five { color: var(--sign-ink); background: linear-gradient(180deg, #ffd24a 0 50%, var(--sign) 50% 100%); }
+.ana-keys.three { grid-template-columns: repeat(3, 1fr); }
+.seg-gap { border-color: transparent; }
+.keypad-wrap { display: flex; flex-wrap: wrap; gap: 28px 40px; align-items: flex-start; }
+.keypad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: min(100%, 300px); }
+.keypad .lt { aspect-ratio: 1.15; flex-direction: column; gap: 4px; background: #fff; border: 1px solid #ddd6c6; }
+.keypad .lt small { font: 600 12px/1 var(--mono); color: #5d636b; letter-spacing: .08em; }
+.keypad .lt.home { background: var(--sign); border-color: var(--sign); color: var(--sign-ink); }
+.keypad .lt.home small { color: var(--sign-ink); }
+.keypad-notes { flex: 1 1 280px; min-width: 0; }
+.keypad-notes p { margin: 0 0 12px; font-size: 17px; max-width: 52ch; }
+@media (max-width: 980px) { .ana-keys.three { grid-template-columns: 1fr; } }
+.saved { margin-top: 18px; }
+.saved-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.saved-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name name del" "code copy del"; gap: 6px 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.saved-list input { grid-area: name; min-width: 0; background: transparent; border: 0; border-bottom: 1px dashed var(--line); color: inherit; font: 700 14px/1.3 var(--body); padding: 2px 0; }
+.saved-list input:focus-visible { outline: 2px solid var(--sign); outline-offset: 2px; }
+.saved-code { grid-area: code; justify-self: start; min-width: 0; background: none; border: 0; padding: 0; color: var(--sign); font: 600 17px/1.2 var(--mono); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+.saved-code:hover { text-decoration: underline; }
+.saved-list .btn { grid-area: copy; }
+.saved-del { grid-area: del; align-self: start; background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.saved-del:hover { color: var(--text); }
+@media (max-width: 760px) {
+  .has-code .saved { display: none; }          /* phone: show saved places before a code is picked */
+  .saved-list { max-height: 34vh; overflow: auto; }
+  .actions { grid-template-columns: 1fr 1fr 1fr; }
+}

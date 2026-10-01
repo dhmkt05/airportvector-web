@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AirportVector — every place on Earth, named from its nearest airport</title>
-  <meta name="description" content="AirportVector (OAVG) is an open, human-readable location code. Every point on Earth is written from its nearest airport: TRZ-D04200355 = 5.5 km north-west of Trichy airport.">
+  <meta name="description" content="AirportVector (OAVG) is an open, human-readable location code. Every point on Earth is written from its nearest airport on a phone-keypad grid: TRZ 55511 79566 = 5.5 km north-west of Trichy airport.">
   <meta name="theme-color" content="#0f1216">
   <link rel="canonical" href="https://airportvector.org/">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://airportvector.org/">
   <meta property="og:title" content="AirportVector — every place on Earth, named from its nearest airport">
-  <meta property="og:description" content="An open, human-readable location code. TRZ-D04200355 = 5.5 km north-west of Trichy airport. Try the live map.">
+  <meta property="og:description" content="An open, human-readable location code. TRZ 55511 79566 = 5.5 km north-west of Trichy airport. Try the live map.">
   <meta property="og:image" content="https://airportvector.org/og.png">
   <meta name="twitter:card" content="summary_large_image">
 
@@ -44,7 +44,7 @@
     <!-- HERO ------------------------------------------------------------ -->
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow"><span class="gate">GATE A–L</span> Open location code · spec v2.1</p>
+        <p class="eyebrow"><span class="gate">KEYPAD 1–9</span> Open location code · spec v4</p>
         <h1 id="hero-title">Every place on Earth,<br><span class="hl">named from its nearest airport.</span></h1>
         <p class="lede">No word lists. No random letters. An AirportVector code tells you <em>which airport</em>, <em>which direction</em> and <em>how far</em> — before you even open a map.</p>
         <div class="hero-cta">
@@ -58,7 +58,7 @@
           <span>DEPARTURES</span><span>LOCATION CODE</span><span class="board-clock" id="clock">--:--</span>
         </div>
         <div class="board-row">
-          <div class="flap" id="heroFlap" data-text="TRZ-D04200355"></div>
+          <div class="flap" id="heroFlap" data-text="TRZ 55511 79566"></div>
         </div>
         <div class="board-sub" id="heroSub">5.5 km north-west of Tiruchirappalli International Airport</div>
         <div class="board-foot"><span class="dot"></span><span id="heroPlace">Near Trichy Central Bus Stand, India</span></div>
@@ -96,7 +96,7 @@
 
           <div class="result" id="result">
             <p class="label">Location code</p>
-            <div class="flap flap-panel" id="panelFlap" data-text="CLICK-THE-MAP"></div>
+            <div class="flap flap-panel" id="panelFlap" data-text="CLICK THE MAP"></div>
             <p class="describe" id="describe">Pick a spot on the map to see its code.</p>
             <p class="locality" id="locality" hidden></p>
             <p class="m-intro" id="mIntro">Every place on Earth, named from its nearest airport. Tap the map or use <b>My location</b>. <a href="#how">What is this?</a></p>
@@ -104,7 +104,7 @@
             <dl class="facts" id="facts" hidden>
               <div><dt>Airport</dt><dd id="fAirport">—</dd></div>
               <div><dt>Direction</dt><dd id="fDir">—</dd></div>
-              <div><dt>Band</dt><dd id="fBand">—</dd></div>
+              <div><dt>Distance</dt><dd id="fBand">—</dd></div>
               <div><dt>Cell</dt><dd id="fCell">—</dd></div>
               <div class="wide"><dt>Coordinates</dt><dd id="fCoord">—</dd></div>
             </dl>
@@ -112,26 +112,33 @@
             <fieldset class="precision" id="precision">
               <legend class="label">Precision</legend>
               <label><input type="radio" name="prec" value="1km"><span>1 km</span></label>
-              <label><input type="radio" name="prec" value="100m"><span>100 m</span></label>
-              <label><input type="radio" name="prec" value="10m" checked><span>10 m</span></label>
-              <label><input type="radio" name="prec" value="1m"><span>1 m</span></label>
+              <label><input type="radio" name="prec" value="333m"><span>333 m</span></label>
+              <label><input type="radio" name="prec" value="111m"><span>111 m</span></label>
+              <label><input type="radio" name="prec" value="37m"><span>37 m</span></label>
+              <label><input type="radio" name="prec" value="12m"><span>12 m</span></label>
+              <label><input type="radio" name="prec" value="4m" checked><span>4 m</span></label>
             </fieldset>
 
             <div class="actions">
               <button class="btn btn-small" id="copyBtn" type="button" disabled>Copy code</button>
+              <button class="btn btn-small btn-ghost" id="saveBtn" type="button" disabled>Save place</button>
               <button class="btn btn-small btn-ghost" id="shareBtn" type="button" disabled>Copy share link</button>
               <button class="btn btn-small btn-ghost" id="locateBtn" type="button">Use my location</button>
             </div>
-            <p class="privacy">“Use my location” is computed on your device and never uploaded.</p>
+            <p class="privacy">Your location and saved places stay on this device. Nothing is uploaded.</p>
+            <div class="saved" id="saved" hidden>
+              <p class="label">My places</p>
+              <ul class="saved-list" id="savedList"></ul>
+            </div>
           </div>
 
           <div class="try">
             <p class="label">Try these</p>
             <div class="chips">
-              <button type="button" class="chip" data-code="LCY-D12710024">London</button>
-              <button type="button" class="chip" data-code="DJG-F2590508465">Sahara</button>
-              <button type="button" class="chip" data-code="IPC-K104561248302">Point Nemo</button>
-              <button type="button" class="chip" data-code="USH-J000000392217">South Pole</button>
+              <button type="button" class="chip" data-code="LCY-55444-38173">London</button>
+              <button type="button" class="chip" data-code="DJG-686479-26417">Sahara</button>
+              <button type="button" class="chip" data-code="IPC-84772643-65933">Point Nemo</button>
+              <button type="button" class="chip" data-code="USH-822858828-82252">South Pole</button>
             </div>
           </div>
         </aside>
@@ -142,42 +149,52 @@
     <section class="how" id="how" aria-labelledby="how-title">
       <div class="section-head">
         <h2 id="how-title"><span class="num">02</span> Read a code in 10 seconds</h2>
-        <p>A code is an airport, one letter, and two distances. That's all.</p>
+        <p>A code is an airport and ten digits, read like a phone number. That's all.</p>
       </div>
 
-      <div class="anatomy" aria-label="Anatomy of the code TRZ-D04200355">
+      <div class="anatomy" aria-label="Anatomy of the code TRZ 55511 79566">
         <div class="ana-code">
-          <span class="seg seg-a">TRZ</span><span class="seg seg-dash">-</span><span class="seg seg-l">D</span><span class="seg seg-x">0420</span><span class="seg seg-y">0355</span>
+          <span class="seg seg-a">TRZ</span><span class="seg seg-gap">&nbsp;</span><span class="seg seg-x">55511</span><span class="seg seg-gap">&nbsp;</span><span class="seg seg-y">79566</span>
         </div>
-        <ol class="ana-keys">
+        <ol class="ana-keys three">
           <li class="k-a"><b>TRZ</b> The nearest airport — Tiruchirappalli, India.</li>
-          <li class="k-l"><b>D</b> Direction <em>and</em> distance band: North-West, under 100 km.</li>
-          <li class="k-x"><b>0420</b> 420 cells West. At 10 m per cell: 4,200 m.</li>
-          <li class="k-y"><b>0355</b> 355 cells North: 3,550 m.</li>
+          <li class="k-x"><b>55511</b> The 1 km square. Three 5s in front: within 4.5 km of the airport, then north-west.</li>
+          <li class="k-y"><b>79566</b> The exact spot inside that square, down to about 4 m.</li>
         </ol>
-        <p class="ana-note">Distance to the airport is √(4.2² + 3.55²) ≈ <b>5.5 km</b>. Quick trick: the bigger number + half the smaller one.</p>
+        <p class="ana-note">Say it like a phone number: <b>T-R-Z, five-five-five-one-one, seven-nine-five-six-six</b>.</p>
       </div>
 
       <div class="letters">
-        <h3>The letter tells direction and distance</h3>
-        <div class="letter-grid" role="table" aria-label="Sector letters">
-          <div class="lg-row lg-head" role="row"><span role="columnheader"></span><span role="columnheader">NE</span><span role="columnheader">SE</span><span role="columnheader">SW</span><span role="columnheader">NW</span></div>
-          <div class="lg-row" role="row"><span role="rowheader">Near <small>&lt; 100 km</small></span><span class="lt b0">A</span><span class="lt b0">B</span><span class="lt b0">C</span><span class="lt b0">D</span></div>
-          <div class="lg-row" role="row"><span role="rowheader">Regional <small>&lt; 1,000 km</small></span><span class="lt b1">E</span><span class="lt b1">F</span><span class="lt b1">G</span><span class="lt b1">H</span></div>
-          <div class="lg-row" role="row"><span role="rowheader">Far <small>&lt; 10,000 km</small></span><span class="lt b2">I</span><span class="lt b2">J</span><span class="lt b2">K</span><span class="lt b2">L</span></div>
+        <h3>Every digit is a key on a phone keypad</h3>
+        <div class="keypad-wrap">
+          <div class="keypad" role="img" aria-label="Phone keypad: 1 north-west, 2 north, 3 north-east, 4 west, 5 centre, 6 east, 7 south-west, 8 south, 9 south-east">
+            <span class="lt">1<small>NW</small></span><span class="lt">2<small>N</small></span><span class="lt">3<small>NE</small></span>
+            <span class="lt">4<small>W</small></span><span class="lt home">5<small>AIRPORT</small></span><span class="lt">6<small>E</small></span>
+            <span class="lt">7<small>SW</small></span><span class="lt">8<small>S</small></span><span class="lt">9<small>SE</small></span>
+          </div>
+          <div class="keypad-notes">
+            <p>The area round the airport is split into 9 squares, numbered like a keypad. Each square is split into 9 again, and again: 81 km → 27 km → 9 km → 3 km → 1 km.</p>
+            <p><b>5 is always the middle,</b> so it always holds the airport. Count the 5s at the start to know how close a place is:</p>
+            <ul class="prec-list">
+              <li><code>TRZ 5····</code><span>within 40 km</span></li>
+              <li><code>TRZ 55···</code><span>within 13.5 km</span></li>
+              <li><code>TRZ 555··</code><span>within 4.5 km</span></li>
+              <li><code>TRZ 5555·</code><span>within 1.5 km</span></li>
+            </ul>
+          </div>
         </div>
-        <p class="rule">Every 4 letters = <b>10× further</b>, and one more digit per axis.</p>
+        <p class="rule">Far from any airport? The first group just gets longer — 6 digits past 121 km, more in the deep ocean.</p>
       </div>
 
       <div class="precision-table">
         <h3>Shorter code, bigger square</h3>
         <ul class="prec-list">
-          <li><code>TRZ-D0403</code><span>1 km</span></li>
-          <li><code>TRZ-D042035</code><span>100 m</span></li>
-          <li><code>TRZ-D04200355</code><span>10 m</span></li>
-          <li><code>TRZ-D0420303554</code><span>1 m</span></li>
+          <li><code>TRZ 55511</code><span>1 km</span></li>
+          <li><code>TRZ 55511 79</code><span>111 m</span></li>
+          <li><code>TRZ 55511 795</code><span>37 m</span></li>
+          <li><code>TRZ 55511 79566</code><span>4 m</span></li>
         </ul>
-        <p class="rule">Each half of a short code is the start of the longer one — trimming digits just zooms out.</p>
+        <p class="rule">A short code is the start of the long one — trimming digits just zooms out. Places that share a start share a square.</p>
       </div>
     </section>
 
@@ -189,11 +206,11 @@
       </div>
       <figure class="cov-fig">
         <img src="/coverage.webp" width="2400" height="1275" loading="lazy" decoding="async"
-             alt="World map coloured by distance band: green near airports, yellow regional, orange far (mostly ocean and Antarctica).">
+             alt="World map coloured by the length of the code's first group: green within 121 km of an airport (5 digits), yellow 121 to 364 km (6 digits), orange farther (7 or more digits, mostly ocean and Antarctica).">
         <figcaption>
-          <span class="swatch b0"></span>A–D near · 18% of the globe, 49% of land
-          <span class="swatch b1"></span>E–H regional · 54% / 51%
-          <span class="swatch b2"></span>I–L far · 29% / &lt;0.1%
+          <span class="swatch b0"></span>5 digits · 22% of the globe, 58% of land
+          <span class="swatch b1"></span>6 digits · 24% / 38%
+          <span class="swatch b2"></span>7+ digits · 54% / 4%
         </figcaption>
       </figure>
 
@@ -217,7 +234,7 @@
     <section class="dev" id="developers" aria-labelledby="dev-title">
       <div class="section-head">
         <h2 id="dev-title"><span class="num">04</span> Developers</h2>
-        <p>Reference implementations in Python and JavaScript, tested against each other on 78,000+ cases.</p>
+        <p>Reference implementations in Python and JavaScript, tested against each other on 120,000+ checks.</p>
       </div>
       <div class="dev-grid">
         <div class="snippet">
@@ -225,24 +242,25 @@
 <pre><code>import airportvector as av
 
 av.encode(10.7950461, 78.6793020)
-# 'TRZ-D04200355'
-av.describe("TRZ-D04200355")
+# 'TRZ-55511-79566'
+av.describe("TRZ 55511 79566")
 # '5.5 km NW of TRZ (Tiruchirappalli International Airport)'
-av.decode("TRZ-D04200355")
-# (10.795052, 78.679291)</code></pre>
+av.decode("TRZ 55511 79566")
+# (10.795057, 78.679284)</code></pre>
         </div>
         <div class="snippet">
           <div class="snippet-head"><span>JavaScript</span><span>oavg.js</span></div>
 <pre><code>OAVG.loadRegistry(await (await fetch("/anchors.json")).json());
 
-OAVG.encode(51.5074, -0.1278);      // "LCY-D12710024"
-OAVG.describe("IPC-K104561248302"); // "2,694 km SSW of IPC (…)"
-OAVG.move("TRZ-D04200355", 50, 0);  // 500 m East</code></pre>
+OAVG.encode(51.5074, -0.1278);         // "LCY-55444-38173"
+OAVG.display("LCY-55444-38173");       // "LCY 55444 38173"
+OAVG.neighbors("TRZ-55511");           // the 8 squares around it
+OAVG.shorten("TRZ-55511-79566", "1km"); // "TRZ-55511"</code></pre>
         </div>
       </div>
       <div class="dev-links">
         <a class="btn btn-primary" href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub repository ↗</a>
-        <a class="btn btn-ghost" href="/spec-v2.1.pdf">Specification v2.1 (PDF)</a>
+        <a class="btn btn-ghost" href="https://github.com/dhmkt05/airportvector/blob/main/docs/SPEC-v4.md" rel="noopener">Specification v4 ↗</a>
         <a class="btn btn-ghost" href="/oavg.js" download>Download oavg.js</a>
         <a class="btn btn-ghost" href="/anchors.json" download>Download anchors.json</a>
       </div>
@@ -253,7 +271,7 @@ OAVG.move("TRZ-D04200355", 50, 0);  // 500 m East</code></pre>
     <div class="foot-grid">
       <div>
         <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="4"/><path d="M8 24 L24 8 M24 8 H13 M24 8 V19" /></svg><span>Airport<b>Vector</b></span></a>
-        <p class="small">Open Airport Vector Grid (OAVG) · draft specification v2.1.</p>
+        <p class="small">Open Airport Vector Grid (OAVG) · draft specification v4.</p>
         <p class="small warn">Draft: airport coordinates are not yet verified against official sources. Do not use for navigation, aviation or emergency services.</p>
       </div>
       <div class="small">

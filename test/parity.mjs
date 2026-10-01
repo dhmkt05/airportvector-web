@@ -37,7 +37,7 @@ const sameMsg = (py, js) => !('err' in py) || js.err === py.err;
 
 // (a) encode
 {
-  const s = section('encode (nearest anchor) x4 precisions'), n = section('nearestAnchor');
+  const s = section('encode (nearest anchor) x6 precisions'), n = section('nearestAnchor');
   for (const e of V.encode) {
     for (const [p, py] of Object.entries(e.codes)) {
       const js = run(() => OAVG.encode(e.lat, e.lon, p));
@@ -46,7 +46,7 @@ const sameMsg = (py, js) => !('err' in py) || js.err === py.err;
     const na = OAVG.nearestAnchor(e.lat, e.lon).code;
     n.check(na === e.nearest, { lat: e.lat, lon: e.lon, py: e.nearest, js: na });
   }
-  const f = section('encode (forced anchor) x4 precisions');
+  const f = section('encode (forced anchor) x6 precisions');
   for (const e of V.encode_forced) {
     for (const [p, py] of Object.entries(e.codes)) {
       const js = run(() => OAVG.encode(e.lat, e.lon, p, e.anchor));
@@ -148,17 +148,17 @@ const sameMsg = (py, js) => !('err' in py) || js.err === py.err;
   for (const args of [['10', '78'], [true, 78.0], [NaN, 78.0], [10.0, Infinity]]) {
     be.check('err' in run(() => OAVG.encode(...args)), { args });
   }
-  be.check('err' in run(() => OAVG.move('TRZ-D04200355', 1.5, 0)), 'move 1.5');
-  be.check('err' in run(() => OAVG.move('TRZ-D04200355', true, 0)), 'move true');
+  be.check('err' in run(() => OAVG.move('TRZ-55511-79566', 1.5, 0)), 'move 1.5');
+  be.check('err' in run(() => OAVG.move('TRZ-55511-79566', true, 0)), 'move true');
   be.check('err' in run(() => OAVG.encodeGrid('TRZ', 5, NaN)), 'encodeGrid NaN');
   be.check('err' in run(() => OAVG.parse(42)), 'parse number');
 
   const rt = section('retired anchor');
   OAVG.loadRegistry(anchors.concat([{ code: 'QQQ', lat: 10.5, lon: 78.5, name: 'Closed', status: 'retired' }]));
-  const g = OAVG.decodeGrid('QQQ-A00000000'), ll = OAVG.decode('QQQ-A00000000');
+  const g = OAVG.decodeGrid('QQQ-55555-55555'), ll = OAVG.decode('QQQ-55555-55555');
   rt.check(g.x === V.retired.decode[0] && g.y === V.retired.decode[1], { g });
   rt.check(Math.abs(ll.lat - V.retired.latlon[0]) < DEG_TOL && Math.abs(ll.lon - V.retired.latlon[1]) < DEG_TOL, { ll });
-  rt.check(run(() => OAVG.encode(10.5, 78.5, '10m', 'QQQ')).err === V.retired.forced_err, 'forced retired');
+  rt.check(run(() => OAVG.encode(10.5, 78.5, '4m', 'QQQ')).err === V.retired.forced_err, 'forced retired');
   rt.check(OAVG.encode(10.5, 78.5) === V.retired.nearest, 'nearest skips retired');
   OAVG.loadRegistry(anchors);
 }
