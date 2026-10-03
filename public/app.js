@@ -94,8 +94,14 @@
   }
 
   /* ---------------------------------------------------------------- helpers */
+  // Toasts must sit inside an open modal dialog, or the dialog's backdrop hides them.
+  function topHost() {
+    var open = document.querySelectorAll("dialog[open]");
+    return open.length ? open[open.length - 1] : document.body;
+  }
   function toast(msg) {
     var t = $("toast");
+    if (t.parentNode !== topHost()) topHost().appendChild(t);
     t.textContent = msg;
     t.classList.add("show");
     clearTimeout(toast._t);
@@ -344,14 +350,15 @@
     }
   }
   // Save: always ask for a name (Home, Office, Site one, Mom's home...).
-  function askSave(code, suggested) {
+  function askSave(code, suggested, after, onCancel) {
     if (!code) return;
     openDlg({
       title: "Save place", code: OAVG.display(code), label: "Name", value: suggested || "",
       placeholder: "e.g. Home, Office, Site one", picks: true,
       note: "Saved on this device only.",
       ok: function () { return "Save"; }, alt: "Cancel",
-      onOk: function (v) { storeNamed(code, v); }
+      onOk: function (v) { storeNamed(code, v); if (after) after(); },
+      onCancel: onCancel
     });
   }
 
@@ -403,6 +410,8 @@
     $("dlgTitle").textContent = cfg.title;
     $("dlgCode").textContent = cfg.code;
     $("dlgLabel").textContent = cfg.label || "Name";
+    var noIn = !!cfg.noInput;
+    $("dlgLabel").hidden = noIn; $("dlgInput").hidden = noIn;
     $("dlgInput").value = cfg.value || "";
     $("dlgInput").placeholder = cfg.placeholder || "";
     $("dlgPicks").hidden = !cfg.picks;
@@ -410,11 +419,12 @@
     $("dlgAlt").textContent = cfg.alt || "Cancel";
     syncDlgOk();
     d.showModal();
-    if (!MOBILE.matches) { $("dlgInput").focus(); $("dlgInput").select(); }
+    if (!MOBILE.matches && !noIn) { $("dlgInput").focus(); $("dlgInput").select(); }
     else $("dlgClose").focus();                          // don't pop the keyboard over the buttons
   }
   function syncDlgOk() { if (dlgCfg) $("dlgOk").textContent = dlgCfg.ok(cleanName($("dlgInput").value)); }
   function closeDlg() { var d = $("dlg"); dlgCfg = null; if (d && d.open) d.close(); }
+  function cancelDlg() { var cfg = dlgCfg; closeDlg(); if (cfg && cfg.onCancel) cfg.onCancel(); }
   function wireDlg() {
     var d = $("dlg");
     if (!d) return;
@@ -430,9 +440,11 @@
       closeDlg();
       if (cfg && cfg.onAlt) cfg.onAlt(v);
     });
-    $("dlgClose").addEventListener("click", closeDlg);
-    d.addEventListener("click", function (e) { if (e.target === d) closeDlg(); });   // tap outside
-    d.addEventListener("cancel", function () { dlgCfg = null; });                    // Esc key
+    $("dlgClose").addEventListener("click", cancelDlg);
+    d.addEventListener("click", function (e) { if (e.target === d) cancelDlg(); });  // tap outside
+    d.addEventListener("cancel", function () {                                     // Esc / Android back
+      var cfg = dlgCfg; dlgCfg = null; if (cfg && cfg.onCancel) cfg.onCancel();
+    });
     document.querySelectorAll("#dlgPicks [data-name]").forEach(function (b) {
       b.addEventListener("click", function () {
         $("dlgInput").value = b.getAttribute("data-name"); syncDlgOk(); $("dlgInput").focus();
@@ -440,52 +452,186 @@
     });
   }
 
-  function renderPlaces() {
-    var list = loadPlaces(), ul = $("savedList");
-    $("saved").hidden = list.length === 0;
-    ul.textContent = "";
-    list.forEach(function (item, idx) {
-      var disp;
-      try { disp = OAVG.display(item.code); } catch (e) { return; }   // skip anything no longer valid
-      var li = document.createElement("li");
-      var name = document.createElement("input");
-      name.type = "text"; name.value = item.name || "Saved place"; name.maxLength = 40;
-      name.setAttribute("aria-label", "Name for " + disp);
-      name.addEventListener("change", function () {
-        var l = loadPlaces(); if (l[idx]) { l[idx].name = cleanName(name.value) || "Saved place"; storePlaces(l); }
-      });
-      var open = document.createElement("button");
-      open.type = "button"; open.className = "saved-code"; open.textContent = disp;
-      open.title = "Show on the map";
-      open.addEventListener("click", function () {
-        try { fromCode(item.code); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
-      });
-      var del = document.createElement("button");
-      del.type = "button"; del.className = "saved-del"; del.textContent = "×";
-      del.setAttribute("aria-label", "Remove " + (item.name || disp));
-      del.addEventListener("click", function () {
-        var l = loadPlaces(); l.splice(idx, 1); storePlaces(l); renderPlaces(); syncSheet();
-      });
+  function validCode(x) { try { OAVG.display(x.code); return true; } catch (e) { return false; } }
+  function goTo(code) {
+    closePlaces();
+    try { fromCode(code); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
+  }
+  function mkBtn(text, cls, label, onClick) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = cls; b.textContent = text;
+    if (label) b.setAttribute("aria-label", label);
+    if (onClick) b.addEventListener("click", onClick);
+    return b;
+  }
+  function navLink(code, who) {
+    var a = document.createElement("a");
+    a.className = "btn btn-small btn-ghost"; a.textContent = "Navigate";
+    a.href = gmapsUrl(code, true); a.target = "_blank"; a.rel = "noopener";
+    a.setAttribute("aria-label", "Navigate to " + who + " with Google Maps");
+    return a;
+  }
 
-      var acts = document.createElement("div");
-      acts.className = "saved-acts";
-      var sh = document.createElement("button");
-      sh.type = "button"; sh.className = "btn btn-small"; sh.textContent = "Share";
-      sh.setAttribute("aria-label", "Share " + (item.name || disp));
-      sh.addEventListener("click", function () { askShare(item.code, cleanName(name.value) || item.name); });
-      var nav = document.createElement("a");
-      nav.className = "btn btn-small btn-ghost"; nav.textContent = "Navigate";
-      nav.href = gmapsUrl(item.code, true); nav.target = "_blank"; nav.rel = "noopener";
-      nav.setAttribute("aria-label", "Navigate to " + (item.name || disp) + " with Google Maps");
-      var cp = document.createElement("button");
-      cp.type = "button"; cp.className = "btn btn-small btn-ghost"; cp.textContent = "Copy";
-      cp.setAttribute("aria-label", "Copy " + disp);
-      cp.addEventListener("click", function () { copy(disp, "Code copied"); });
-      acts.appendChild(sh); acts.appendChild(nav); acts.appendChild(cp);
-
-      li.appendChild(name); li.appendChild(del); li.appendChild(open); li.appendChild(acts);
-      ul.appendChild(li);
+  // One row in "My places" (kind "saved") or "Recently received" (kind "recent").
+  function placeRow(item, kind) {
+    var disp = OAVG.display(item.code), who = item.name || disp;
+    var li = document.createElement("li"), title;
+    if (kind === "saved") {
+      title = document.createElement("input");
+      title.type = "text"; title.value = item.name || "Saved place"; title.maxLength = 40;
+      title.setAttribute("aria-label", "Name for " + disp);
+      title.addEventListener("change", function () { renamePlace(item.code, title.value); });
+    } else {
+      title = document.createElement("p");
+      title.className = "saved-name"; title.textContent = item.name || "Shared place";
+    }
+    var open = mkBtn(disp, "saved-code", null, function () {
+      if (kind === "recent") shared = { code: item.code, name: item.name || "" };
+      goTo(item.code);
     });
+    open.title = "Show on the map";
+    var acts = document.createElement("div");
+    acts.className = "saved-acts";
+    if (kind === "saved") {
+      acts.appendChild(mkBtn("Share", "btn btn-small", "Share " + who, function () {
+        askShare(item.code, cleanName(title.value) || item.name);
+      }));
+      acts.appendChild(navLink(item.code, who));
+      acts.appendChild(mkBtn("Copy", "btn btn-small btn-ghost", "Copy " + disp, function () { copy(disp, "Code copied"); }));
+      acts.appendChild(mkBtn("Delete", "btn btn-small btn-ghost btn-del", "Delete " + who, function () { deletePlace(item.code); }));
+    } else {
+      var isSaved = !!savedNameFor(item.code);
+      var sv = mkBtn(isSaved ? "Saved ✓" : "Save", "btn btn-small", "Save " + who, function () { askSave(item.code, item.name); });
+      sv.disabled = isSaved;
+      acts.appendChild(sv);
+      acts.appendChild(navLink(item.code, who));
+      acts.appendChild(mkBtn("Remove", "btn btn-small btn-ghost btn-del", "Remove " + who + " from recent", function () {
+        storeRecent(loadRecent().filter(function (x) { return x.code !== item.code; })); renderRecent();
+      }));
+    }
+    li.appendChild(title); li.appendChild(open); li.appendChild(acts);
+    return li;
+  }
+
+  function renderPlaces() {
+    var list = loadPlaces().filter(validCode);
+    [$("savedList"), $("placesList")].forEach(function (ul) {
+      ul.textContent = "";
+      list.forEach(function (item) { ul.appendChild(placeRow(item, "saved")); });
+    });
+    $("saved").hidden = list.length === 0;
+    $("placesEmpty").hidden = list.length > 0;
+    $("placesCount").textContent = String(list.length);
+    $("placesCount").hidden = list.length === 0;
+    renderRecent();
+    syncSheet();
+  }
+  function renamePlace(code, name) {
+    var l = loadPlaces();
+    for (var i = 0; i < l.length; i++) if (l[i].code === code) { l[i].name = cleanName(name) || "Saved place"; break; }
+    if (storePlaces(l)) renderPlaces();
+  }
+
+  /* ---------------------------------------------------------------- delete with undo (no "are you sure?") */
+  var undoFn = null, undoTimer = null;
+  function showUndo(msg, fn) {
+    var bar = $("undoBar");
+    if (bar.parentNode !== topHost()) topHost().appendChild(bar);
+    $("toast").classList.remove("show");
+    $("undoText").textContent = msg;
+    undoFn = fn; bar.hidden = false;
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(hideUndo, 6000);
+  }
+  function hideUndo() { $("undoBar").hidden = true; undoFn = null; }
+  function deletePlace(code) {
+    var l = loadPlaces(), idx = -1;
+    for (var i = 0; i < l.length; i++) if (l[i].code === code) { idx = i; break; }
+    if (idx < 0) return;
+    var item = l.splice(idx, 1)[0];
+    if (!storePlaces(l)) return;
+    renderPlaces();
+    showUndo("Deleted “" + (item.name || OAVG.display(code)) + "”", function () {
+      var l2 = loadPlaces().filter(function (x) { return x.code !== item.code; });
+      l2.splice(Math.min(idx, l2.length), 0, item);
+      if (storePlaces(l2)) { renderPlaces(); toast("Restored “" + (item.name || OAVG.display(code)) + "”"); }
+    });
+  }
+
+  /* ---------------------------------------------------------------- recently received (last 5 links opened, this device only) */
+  var RECENT_KEY = "av.recent.v1", RECENT_MAX = 5;
+  function loadRecent() {
+    try {
+      var v = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      return Array.isArray(v) ? v.filter(function (x) { return x && typeof x.code === "string"; }) : [];
+    } catch (e) { return []; }
+  }
+  function storeRecent(list) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (e) { /* optional */ }
+  }
+  function addRecent(code, name) {
+    var l = loadRecent().filter(function (x) { return x.code !== code; });
+    l.unshift({ code: code, name: cleanName(name), at: Date.now() });
+    storeRecent(l);
+  }
+  function renderRecent() {
+    var l = loadRecent().filter(validCode), ul = $("recentList");
+    ul.textContent = "";
+    l.forEach(function (item) { ul.appendChild(placeRow(item, "recent")); });
+    $("recentBox").hidden = l.length === 0;
+  }
+
+  /* ---------------------------------------------------------------- "My places" sheet */
+  function openPlaces() {
+    renderPlaces();
+    var d = $("placesDlg");
+    if (typeof d.showModal !== "function") { $("saved").hidden = false; $("saved").scrollIntoView(); return; }
+    if (!d.open) d.showModal();
+  }
+  function closePlaces() { var d = $("placesDlg"); if (d && d.open) d.close(); }
+
+  /* ---------------------------------------------------------------- closing a shared place */
+  var sharedPushed = false, ignorePop = false;   // we add one history entry so the phone's Back closes the card
+  function sharedLink(s) { return "/" + s.code + (s.name ? "?n=" + encName(s.name) : ""); }
+  function requestCloseShared(fromBack) {
+    if (!shared) return;
+    var s = shared;
+    if (savedNameFor(s.code)) { closeShared(fromBack); return; }      // already saved: no pointless prompt
+    var restore = function () {                                       // user changed their mind after Back
+      if (fromBack) { try { history.pushState(null, "", sharedLink(s)); sharedPushed = true; } catch (e) { /* ignore */ } }
+    };
+    openDlg({
+      title: "Keep “" + (s.name || OAVG.display(s.code)) + "”?", code: OAVG.display(s.code),
+      noInput: true, picks: false,
+      note: "If you discard it, you'll still find it in My places → Recently received.",
+      ok: function () { return "Save"; }, alt: "Discard",
+      onOk: function () { askSave(s.code, s.name, function () { closeShared(fromBack); }, restore); },
+      onAlt: function () { closeShared(fromBack); toast("Discarded · kept in Recently received"); },
+      onCancel: restore
+    });
+  }
+  function closeShared(fromBack) {
+    shared = null;
+    if (sharedPushed && !fromBack) { sharedPushed = false; ignorePop = true; try { history.back(); } catch (e) { ignorePop = false; } }
+    else sharedPushed = false;
+    resetView();
+  }
+  // Back to the plain live map ("Tap the map").
+  function resetView() {
+    state = { lat: null, lon: null, code: null, anchor: null, typedBase: null };
+    renderShared(false);
+    document.body.classList.remove("has-code");
+    renderFlap($("panelFlap"), MOBILE.matches ? "TAP THE MAP" : "CLICK THE MAP", false);
+    $("describe").textContent = "Pick a spot on the map to see its code.";
+    $("facts").hidden = true;
+    locSeq++; $("locality").hidden = true; $("locality").textContent = "";
+    $("copyBtn").disabled = true; $("shareBtn").disabled = true; $("saveBtn").disabled = true;
+    $("saveBtn").textContent = "Save place";
+    if (pointMarker) pointMarker.remove();
+    if (airportMarker) airportMarker.remove();
+    if (map && mapReady) { map.getSource("av-line").setData(emptyFC()); map.getSource("av-cell").setData(emptyFC()); }
+    $("mapHint").classList.remove("gone");
+    try { history.replaceState(null, "", "/"); } catch (e) { /* ignore */ }
     syncSheet();
   }
 
@@ -530,6 +676,16 @@
     $("shareBtn").addEventListener("click", function () { askShare(state.code, savedNameFor(state.code)); });
     $("sharedSave").addEventListener("click", function () { if (shared) askSave(shared.code, shared.name); });
     wireDlg();
+    $("placesBtn").addEventListener("click", openPlaces);
+    $("placesClose").addEventListener("click", closePlaces);
+    $("placesDlg").addEventListener("click", function (e) { if (e.target === $("placesDlg")) closePlaces(); });
+    $("recentClear").addEventListener("click", function () { storeRecent([]); renderRecent(); toast("Recent list cleared"); });
+    $("sharedClose").addEventListener("click", function () { requestCloseShared(false); });
+    $("undoBtn").addEventListener("click", function () { var f = undoFn; hideUndo(); if (f) f(); });
+    window.addEventListener("popstate", function () {
+      if (ignorePop) { ignorePop = false; return; }
+      if (shared && !$("sharedBox").hidden) { sharedPushed = false; requestCloseShared(true); }
+    });
     $("locateBtn").addEventListener("click", locateMe);
     $("locateFab").addEventListener("click", locateMe);
     window.addEventListener("resize", syncSheet);
@@ -605,7 +761,17 @@
         if (c) {
           try {
             // airportvector.org/TRZ-52868-48177?n=Name  ->  "Shared place" card with Google Maps buttons
-            if (m) shared = { code: OAVG.parse(OAVG.normalize(c)).code, name: cleanName(qs.get("n")) };
+            if (m) {
+              shared = { code: OAVG.parse(OAVG.normalize(c)).code, name: cleanName(qs.get("n")) };
+              addRecent(shared.code, shared.name);
+              renderRecent();
+              try {
+                var here = location.pathname + location.search;
+                history.replaceState(null, "", "/");
+                history.pushState(null, "", here);
+                sharedPushed = true;
+              } catch (e) { /* ignore */ }
+            }
             fromCode(c); $("mapHint").classList.add("gone");
           } catch (err) { shared = null; showError(err.message); }
         }

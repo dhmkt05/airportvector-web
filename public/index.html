@@ -36,6 +36,7 @@
       <a href="#coverage">Coverage</a>
       <a href="#developers">Developers</a>
       <a href="/logistics">For logistics</a>
+      <button class="nav-places" id="placesBtn" type="button" aria-label="My places">&#9733; <span class="np-text">My places</span> <span class="badge" id="placesCount" hidden>0</span></button>
       <a class="nav-gh" href="https://github.com/dhmkt05/airportvector" rel="noopener">GitHub ↗</a>
     </nav>
   </header>
@@ -96,6 +97,7 @@
 
           <div class="result" id="result">
             <div class="shared" id="sharedBox" hidden>
+              <button class="shared-x" id="sharedClose" type="button" aria-label="Close shared place">&times;</button>
               <p class="label">Shared place</p>
               <p class="shared-name" id="sharedName"></p>
               <p class="shared-code" id="sharedCode" hidden></p>
@@ -294,6 +296,25 @@ OAVG.shorten("TRZ-55511-79566", "1km"); // "TRZ-55511"</code></pre>
     </div>
   </footer>
 
+  <dialog class="dlg dlg-places" id="placesDlg" aria-labelledby="placesTitle">
+    <div class="dlg-body">
+      <div class="dlg-head">
+        <p class="dlg-title" id="placesTitle">My places</p>
+        <button type="button" class="dlg-x" id="placesClose" aria-label="Close">&times;</button>
+      </div>
+      <p class="dlg-note" id="placesEmpty">No saved places yet. Tap the map or use My location, then Save place.</p>
+      <ul class="saved-list" id="placesList"></ul>
+      <div class="recent" id="recentBox" hidden>
+        <div class="recent-head">
+          <p class="label">Recently received</p>
+          <button type="button" class="linkish" id="recentClear">Clear</button>
+        </div>
+        <ul class="saved-list" id="recentList"></ul>
+      </div>
+      <p class="dlg-note">Stored on this device only.</p>
+    </div>
+  </dialog>
+
   <dialog class="dlg" id="dlg" aria-labelledby="dlgTitle">
     <form id="dlgForm" novalidate>
       <div class="dlg-head">
@@ -318,6 +339,7 @@ OAVG.shorten("TRZ-55511-79566", "1km"); // "TRZ-55511"</code></pre>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="undo" id="undoBar" role="status" aria-live="polite" hidden><span id="undoText"></span><button type="button" id="undoBtn">Undo</button></div>
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
           integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous" defer></script>
