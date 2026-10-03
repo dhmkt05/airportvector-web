@@ -323,7 +323,10 @@ OAVG.shorten("TRZ-55511-79566", "1km"); // "TRZ-55511"</code></pre>
       </div>
       <p class="dlg-code" id="dlgCode"></p>
       <label class="dlg-field" for="dlgInput" id="dlgLabel">Name</label>
-      <input class="dlg-input" id="dlgInput" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+      <div class="dlg-inwrap">
+        <input class="dlg-input" id="dlgInput" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+        <button type="button" class="dlg-clear" id="dlgClear" aria-label="Clear name" hidden>&times;</button>
+      </div>
       <div class="chips dlg-picks" id="dlgPicks">
         <button type="button" class="chip" data-name="Home">&#x1F3E0; Home</button>
         <button type="button" class="chip" data-name="Office">&#x1F3E2; Office</button>

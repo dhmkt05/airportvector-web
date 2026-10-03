@@ -367,15 +367,16 @@
   function canNativeShare() {
     return !!navigator.share && !!window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   }
-  // My own label is private, so the name the receiver sees starts empty.
+  // The name the receiver sees starts as my saved name; I can overwrite it or clear it (code only).
   function askShare(code, myName) {
     if (!code) return;
     var native = canNativeShare();
     openDlg({
       title: myName ? "Share “" + myName + "”" : "Share this place",
-      code: OAVG.display(code), label: "Name they will see (optional)", value: "",
+      code: OAVG.display(code), label: "Name they will see (optional)", value: myName || "",
       placeholder: "e.g. Abdul's office", picks: false,
-      note: (myName ? "Your own label isn’t sent. " : "") + "Leave blank to send just the code.",
+      note: myName ? "Change the name if you like, or clear it to send just the code."
+                   : "Leave blank to send just the code.",
       ok: function (v) { return native ? (v ? "Share" : "Share code only") : "WhatsApp"; },
       alt: native ? "Cancel" : "Copy",
       onOk: function (v) { sendShare(code, v, native ? "native" : "whatsapp"); },
@@ -422,13 +423,19 @@
     if (!MOBILE.matches && !noIn) { $("dlgInput").focus(); $("dlgInput").select(); }
     else $("dlgClose").focus();                          // don't pop the keyboard over the buttons
   }
-  function syncDlgOk() { if (dlgCfg) $("dlgOk").textContent = dlgCfg.ok(cleanName($("dlgInput").value)); }
+  function syncDlgOk() {
+    $("dlgClear").hidden = !$("dlgInput").value || $("dlgInput").hidden;
+    if (dlgCfg) $("dlgOk").textContent = dlgCfg.ok(cleanName($("dlgInput").value));
+  }
   function closeDlg() { var d = $("dlg"); dlgCfg = null; if (d && d.open) d.close(); }
   function cancelDlg() { var cfg = dlgCfg; closeDlg(); if (cfg && cfg.onCancel) cfg.onCancel(); }
   function wireDlg() {
     var d = $("dlg");
     if (!d) return;
     $("dlgInput").addEventListener("input", syncDlgOk);
+    $("dlgClear").addEventListener("click", function () {     // one tap empties the name box
+      $("dlgInput").value = ""; syncDlgOk(); $("dlgInput").focus();
+    });
     $("dlgForm").addEventListener("submit", function (e) {
       e.preventDefault();
       var cfg = dlgCfg, v = cleanName($("dlgInput").value);
@@ -673,7 +680,9 @@
     $("saveBtn").addEventListener("click", function () {
       askSave(state.code, shared && shared.code === state.code && shared.name ? shared.name : savedNameFor(state.code));
     });
-    $("shareBtn").addEventListener("click", function () { askShare(state.code, savedNameFor(state.code)); });
+    $("shareBtn").addEventListener("click", function () {
+      askShare(state.code, savedNameFor(state.code) || (shared && shared.code === state.code ? shared.name : ""));
+    });
     $("sharedSave").addEventListener("click", function () { if (shared) askSave(shared.code, shared.name); });
     wireDlg();
     $("placesBtn").addEventListener("click", openPlaces);
