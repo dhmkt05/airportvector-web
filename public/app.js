@@ -16,7 +16,22 @@
   var $ = function (id) { return document.getElementById(id); };
   var MOBILE = window.matchMedia("(max-width: 760px)");
   var CODE_PATH = /^\/([A-Za-z]{3}-[1-9]{5,9}(?:-[1-9]{1,5})?)\/?$/;
-  function shareUrl(code) { return location.origin + "/" + code; }
+  // Encode a name for a URL; also escape ' ( ) ! * so chat apps don't cut the link short.
+  function encName(s) {
+    return encodeURIComponent(s).replace(/[!'()*]/g, function (c) { return "%" + c.charCodeAt(0).toString(16).toUpperCase(); });
+  }
+  function shareUrl(code, name) { return location.origin + "/" + code + (name ? "?n=" + encName(name) : ""); }
+  // Names come from people and from links: strip control characters, squash spaces, cap the length.
+  // (Always shown with textContent / .value, never as HTML.)
+  function cleanName(s) {
+    return String(s == null ? "" : s).replace(/[\u0000-\u001F\u007F-\u009F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+  }
+  function gmapsUrl(code, navigate) {
+    var c = OAVG.decode(code), ll = fmt(c.lat) + "," + fmt(c.lon);
+    return navigate ? "https://www.google.com/maps/dir/?api=1&destination=" + ll
+                    : "https://www.google.com/maps/search/?api=1&query=" + ll;
+  }
+  var shared = null;   // place opened from a share link: { code, name }
   var state = { lat: null, lon: null, code: null, anchor: null, typedBase: null };
   var ready = false;
   var map = null, mapReady = false, pointMarker = null, airportMarker = null;
@@ -144,11 +159,28 @@
     setPrecisionRadio(p.precision);
     showError(null);
 
-    try { history.replaceState(null, "", "/" + p.code + location.hash); } catch (e) { /* ignore */ }
+    var isShared = !!(shared && shared.code === p.code);
+    renderShared(isShared);
+    try {
+      history.replaceState(null, "", "/" + p.code + (isShared && shared.name ? "?n=" + encName(shared.name) : "") + location.hash);
+    } catch (e) { /* ignore */ }
     document.body.classList.add("has-code");
     syncSheet();
     drawOnMap(p, a, centre, opts.fly !== false);
     loadLocality(p.code);
+  }
+
+  /* ---------------------------------------------------------------- shared place (opened from a link) */
+  function renderShared(on) {
+    var box = $("sharedBox");
+    box.hidden = !on;
+    if (!on) return;
+    var disp = OAVG.display(shared.code);
+    $("sharedName").textContent = shared.name || disp;
+    $("sharedCode").textContent = shared.name ? disp : "";
+    $("sharedCode").hidden = !shared.name;
+    $("sharedNav").href = gmapsUrl(shared.code, true);
+    $("sharedOpen").href = gmapsUrl(shared.code, false);
   }
 
   /* ---------------------------------------------------------------- locality (India Post, pilot) */
@@ -295,13 +327,119 @@
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(list.slice(0, SAVE_MAX))); return true; }
     catch (e) { toast("Couldn't save on this browser (private mode?)"); return false; }
   }
-  function savePlace() {
-    if (!state.code) return;
-    var list = loadPlaces().filter(function (x) { return x.code !== state.code; });
-    var name = state.source === "gps" ? "My location" : "Saved place " + (list.length + 1);
-    list.unshift({ code: state.code, name: name, at: Date.now() });
-    if (storePlaces(list)) { renderPlaces(); toast("Saved on this device"); }
+  function savedNameFor(code) {
+    var l = loadPlaces();
+    for (var i = 0; i < l.length; i++) if (l[i].code === code) return l[i].name || "";
+    return "";
   }
+  function storeNamed(code, name) {
+    var list = loadPlaces().filter(function (x) { return x.code !== code; });
+    var dropped = list.length >= SAVE_MAX;
+    name = cleanName(name) ||
+      (state.source === "gps" && code === state.code ? "My location" : "Saved place " + (list.length + 1));
+    list.unshift({ code: code, name: name, at: Date.now() });
+    if (storePlaces(list)) {
+      renderPlaces();
+      toast(dropped ? "Saved · oldest place removed (max " + SAVE_MAX + ")" : "Saved “" + name + "”");
+    }
+  }
+  // Save: always ask for a name (Home, Office, Site one, Mom's home...).
+  function askSave(code, suggested) {
+    if (!code) return;
+    openDlg({
+      title: "Save place", code: OAVG.display(code), label: "Name", value: suggested || "",
+      placeholder: "e.g. Home, Office, Site one", picks: true,
+      note: "Saved on this device only.",
+      ok: function () { return "Save"; }, alt: "Cancel",
+      onOk: function (v) { storeNamed(code, v); }
+    });
+  }
+
+  /* ---------------------------------------------------------------- sharing */
+  // Phones get the system share sheet (WhatsApp, Telegram, SMS...). Desktops get WhatsApp + Copy.
+  function canNativeShare() {
+    return !!navigator.share && !!window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  }
+  // My own label is private, so the name the receiver sees starts empty.
+  function askShare(code, myName) {
+    if (!code) return;
+    var native = canNativeShare();
+    openDlg({
+      title: myName ? "Share “" + myName + "”" : "Share this place",
+      code: OAVG.display(code), label: "Name they will see (optional)", value: "",
+      placeholder: "e.g. Abdul's office", picks: false,
+      note: (myName ? "Your own label isn’t sent. " : "") + "Leave blank to send just the code.",
+      ok: function (v) { return native ? (v ? "Share" : "Share code only") : "WhatsApp"; },
+      alt: native ? "Cancel" : "Copy",
+      onOk: function (v) { sendShare(code, v, native ? "native" : "whatsapp"); },
+      onAlt: native ? null : function (v) { sendShare(code, v, "copy"); }
+    });
+  }
+  function sendShare(code, name, how) {
+    var disp = OAVG.display(code), url = shareUrl(code, name);
+    var text = (name ? name + "\n" : "") + disp;
+    var full = text + "\n" + url;
+    if (how === "native") {
+      navigator.share({ title: name || disp, text: text, url: url }).catch(function (e) {
+        if (!e || e.name !== "AbortError") copy(full, "Share message copied");
+      });
+    } else if (how === "whatsapp") {
+      window.open("https://wa.me/?text=" + encodeURIComponent(full), "_blank", "noopener");
+    } else {
+      copy(full, "Share message copied");
+    }
+  }
+
+  /* ---------------------------------------------------------------- name dialog (save + share) */
+  var dlgCfg = null;
+  function openDlg(cfg) {
+    var d = $("dlg");
+    if (!d || typeof d.showModal !== "function") {      // very old browsers
+      var v = window.prompt(cfg.title + " — " + cfg.label, cfg.value || "");
+      if (v !== null) cfg.onOk(cleanName(v));
+      return;
+    }
+    dlgCfg = cfg;
+    $("dlgTitle").textContent = cfg.title;
+    $("dlgCode").textContent = cfg.code;
+    $("dlgLabel").textContent = cfg.label || "Name";
+    $("dlgInput").value = cfg.value || "";
+    $("dlgInput").placeholder = cfg.placeholder || "";
+    $("dlgPicks").hidden = !cfg.picks;
+    $("dlgNote").textContent = cfg.note || "";
+    $("dlgAlt").textContent = cfg.alt || "Cancel";
+    syncDlgOk();
+    d.showModal();
+    if (!MOBILE.matches) { $("dlgInput").focus(); $("dlgInput").select(); }
+    else $("dlgClose").focus();                          // don't pop the keyboard over the buttons
+  }
+  function syncDlgOk() { if (dlgCfg) $("dlgOk").textContent = dlgCfg.ok(cleanName($("dlgInput").value)); }
+  function closeDlg() { var d = $("dlg"); dlgCfg = null; if (d && d.open) d.close(); }
+  function wireDlg() {
+    var d = $("dlg");
+    if (!d) return;
+    $("dlgInput").addEventListener("input", syncDlgOk);
+    $("dlgForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var cfg = dlgCfg, v = cleanName($("dlgInput").value);
+      closeDlg();
+      if (cfg) cfg.onOk(v);
+    });
+    $("dlgAlt").addEventListener("click", function () {
+      var cfg = dlgCfg, v = cleanName($("dlgInput").value);
+      closeDlg();
+      if (cfg && cfg.onAlt) cfg.onAlt(v);
+    });
+    $("dlgClose").addEventListener("click", closeDlg);
+    d.addEventListener("click", function (e) { if (e.target === d) closeDlg(); });   // tap outside
+    d.addEventListener("cancel", function () { dlgCfg = null; });                    // Esc key
+    document.querySelectorAll("#dlgPicks [data-name]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        $("dlgInput").value = b.getAttribute("data-name"); syncDlgOk(); $("dlgInput").focus();
+      });
+    });
+  }
+
   function renderPlaces() {
     var list = loadPlaces(), ul = $("savedList");
     $("saved").hidden = list.length === 0;
@@ -314,7 +452,7 @@
       name.type = "text"; name.value = item.name || "Saved place"; name.maxLength = 40;
       name.setAttribute("aria-label", "Name for " + disp);
       name.addEventListener("change", function () {
-        var l = loadPlaces(); if (l[idx]) { l[idx].name = name.value.trim() || "Saved place"; storePlaces(l); }
+        var l = loadPlaces(); if (l[idx]) { l[idx].name = cleanName(name.value) || "Saved place"; storePlaces(l); }
       });
       var open = document.createElement("button");
       open.type = "button"; open.className = "saved-code"; open.textContent = disp;
@@ -322,17 +460,30 @@
       open.addEventListener("click", function () {
         try { fromCode(item.code); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
       });
-      var cp = document.createElement("button");
-      cp.type = "button"; cp.className = "btn btn-small btn-ghost"; cp.textContent = "Copy";
-      cp.setAttribute("aria-label", "Copy " + disp);
-      cp.addEventListener("click", function () { copy(disp, "Code copied"); });
       var del = document.createElement("button");
       del.type = "button"; del.className = "saved-del"; del.textContent = "×";
       del.setAttribute("aria-label", "Remove " + (item.name || disp));
       del.addEventListener("click", function () {
         var l = loadPlaces(); l.splice(idx, 1); storePlaces(l); renderPlaces(); syncSheet();
       });
-      li.appendChild(name); li.appendChild(open); li.appendChild(cp); li.appendChild(del);
+
+      var acts = document.createElement("div");
+      acts.className = "saved-acts";
+      var sh = document.createElement("button");
+      sh.type = "button"; sh.className = "btn btn-small"; sh.textContent = "Share";
+      sh.setAttribute("aria-label", "Share " + (item.name || disp));
+      sh.addEventListener("click", function () { askShare(item.code, cleanName(name.value) || item.name); });
+      var nav = document.createElement("a");
+      nav.className = "btn btn-small btn-ghost"; nav.textContent = "Navigate";
+      nav.href = gmapsUrl(item.code, true); nav.target = "_blank"; nav.rel = "noopener";
+      nav.setAttribute("aria-label", "Navigate to " + (item.name || disp) + " with Google Maps");
+      var cp = document.createElement("button");
+      cp.type = "button"; cp.className = "btn btn-small btn-ghost"; cp.textContent = "Copy";
+      cp.setAttribute("aria-label", "Copy " + disp);
+      cp.addEventListener("click", function () { copy(disp, "Code copied"); });
+      acts.appendChild(sh); acts.appendChild(nav); acts.appendChild(cp);
+
+      li.appendChild(name); li.appendChild(del); li.appendChild(open); li.appendChild(acts);
       ul.appendChild(li);
     });
     syncSheet();
@@ -373,12 +524,16 @@
     });
 
     $("copyBtn").addEventListener("click", function () { copy(state.display, "Code copied"); });
-    $("saveBtn").addEventListener("click", savePlace);
-    $("shareBtn").addEventListener("click", function () { copy(shareUrl(state.code), "Share link copied"); });
+    $("saveBtn").addEventListener("click", function () {
+      askSave(state.code, shared && shared.code === state.code && shared.name ? shared.name : savedNameFor(state.code));
+    });
+    $("shareBtn").addEventListener("click", function () { askShare(state.code, savedNameFor(state.code)); });
+    $("sharedSave").addEventListener("click", function () { if (shared) askSave(shared.code, shared.name); });
+    wireDlg();
     $("locateBtn").addEventListener("click", locateMe);
     $("locateFab").addEventListener("click", locateMe);
     window.addEventListener("resize", syncSheet);
-    document.querySelectorAll(".chip").forEach(function (b) {
+    document.querySelectorAll(".chip[data-code]").forEach(function (b) {
       b.addEventListener("click", function () {
         try { fromCode(b.getAttribute("data-code")); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
       });
@@ -444,10 +599,15 @@
         renderPlaces();
         heroShow(false);
         setInterval(function () { heroIdx = (heroIdx + 1) % HERO.length; heroShow(true); }, 5200);
+        var qs = new URLSearchParams(location.search);
         var m = location.pathname.match(CODE_PATH);
-        var c = m ? m[1] : new URLSearchParams(location.search).get("c");
+        var c = m ? m[1] : qs.get("c");
         if (c) {
-          try { fromCode(c); $("mapHint").classList.add("gone"); } catch (err) { showError(err.message); }
+          try {
+            // airportvector.org/TRZ-52868-48177?n=Name  ->  "Shared place" card with Google Maps buttons
+            if (m) shared = { code: OAVG.parse(OAVG.normalize(c)).code, name: cleanName(qs.get("n")) };
+            fromCode(c); $("mapHint").classList.add("gone");
+          } catch (err) { shared = null; showError(err.message); }
         }
       })
       .catch(function () { showError("Couldn't load the airport list. Please refresh the page."); });

@@ -95,6 +95,16 @@
           <p class="search-error" id="searchError" role="alert" hidden></p>
 
           <div class="result" id="result">
+            <div class="shared" id="sharedBox" hidden>
+              <p class="label">Shared place</p>
+              <p class="shared-name" id="sharedName"></p>
+              <p class="shared-code" id="sharedCode" hidden></p>
+              <div class="shared-actions">
+                <a class="btn btn-small btn-primary" id="sharedNav" href="#" target="_blank" rel="noopener">Navigate with Google Maps</a>
+                <a class="btn btn-small btn-ghost" id="sharedOpen" href="#" target="_blank" rel="noopener">Open in Google Maps</a>
+                <button class="btn btn-small btn-ghost" id="sharedSave" type="button">Save to my places</button>
+              </div>
+            </div>
             <p class="label">Location code</p>
             <div class="flap flap-panel" id="panelFlap" data-text="CLICK THE MAP"></div>
             <p class="describe" id="describe">Pick a spot on the map to see its code.</p>
@@ -122,7 +132,7 @@
             <div class="actions">
               <button class="btn btn-small" id="copyBtn" type="button" disabled>Copy code</button>
               <button class="btn btn-small btn-ghost" id="saveBtn" type="button" disabled>Save place</button>
-              <button class="btn btn-small btn-ghost" id="shareBtn" type="button" disabled>Copy share link</button>
+              <button class="btn btn-small btn-ghost" id="shareBtn" type="button" disabled>Share</button>
               <button class="btn btn-small btn-ghost" id="locateBtn" type="button">Use my location</button>
             </div>
             <p class="privacy">Your location and saved places stay on this device. Nothing is uploaded.</p>
@@ -283,6 +293,29 @@ OAVG.shorten("TRZ-55511-79566", "1km"); // "TRZ-55511"</code></pre>
       </div>
     </div>
   </footer>
+
+  <dialog class="dlg" id="dlg" aria-labelledby="dlgTitle">
+    <form id="dlgForm" novalidate>
+      <div class="dlg-head">
+        <p class="dlg-title" id="dlgTitle">Save place</p>
+        <button type="button" class="dlg-x" id="dlgClose" aria-label="Close">&times;</button>
+      </div>
+      <p class="dlg-code" id="dlgCode"></p>
+      <label class="dlg-field" for="dlgInput" id="dlgLabel">Name</label>
+      <input class="dlg-input" id="dlgInput" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+      <div class="chips dlg-picks" id="dlgPicks">
+        <button type="button" class="chip" data-name="Home">&#x1F3E0; Home</button>
+        <button type="button" class="chip" data-name="Office">&#x1F3E2; Office</button>
+        <button type="button" class="chip" data-name="Shop">&#x1F3EA; Shop</button>
+        <button type="button" class="chip" data-name="Site">&#x1F4CD; Site</button>
+      </div>
+      <p class="dlg-note" id="dlgNote"></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-small btn-ghost" id="dlgAlt">Cancel</button>
+        <button type="submit" class="btn btn-small btn-primary" id="dlgOk">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
