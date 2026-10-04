@@ -26,8 +26,9 @@
   function cleanName(s) {
     return String(s == null ? "" : s).replace(/[\u0000-\u001F\u007F-\u009F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
   }
-  // Code as written in shared messages: the normal readable form, e.g. "TRZ 52868 48177".
-  function msgCode(code) { return OAVG.display(code); }
+  // Code as written in shared messages: "TRZ52868 48177". Joining the airport letters to the digits
+  // stops WhatsApp reading "52868 48177" as a 10-digit phone number and making it a "call" link.
+  function msgCode(code) { return OAVG.display(code).replace(" ", ""); }
   // Accept codes pasted back from a message: dots / bullets / invisible characters -> spaces.
   function looseCode(text) { return String(text).replace(/[\u00B7\u2022\u2027\u30FB.\u200B-\u200D\u2060\uFEFF]/g, " "); }
   function gmapsUrl(code, navigate) {
