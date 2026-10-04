@@ -26,9 +26,8 @@
   function cleanName(s) {
     return String(s == null ? "" : s).replace(/[\u0000-\u001F\u007F-\u009F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
   }
-  // In chat messages, "TRZ 52868 48177" looks like a 10-digit phone number and WhatsApp makes it a
-  // "call" link. Middle dots ("TRZ·52868·48177") keep it readable without the phone-number look.
-  function msgCode(code) { return OAVG.display(code).replace(/ /g, "\u00B7"); }
+  // Code as written in shared messages: the normal readable form, e.g. "TRZ 52868 48177".
+  function msgCode(code) { return OAVG.display(code); }
   // Accept codes pasted back from a message: dots / bullets / invisible characters -> spaces.
   function looseCode(text) { return String(text).replace(/[\u00B7\u2022\u2027\u30FB.\u200B-\u200D\u2060\uFEFF]/g, " "); }
   function gmapsUrl(code, navigate) {
