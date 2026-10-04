@@ -26,6 +26,11 @@
   function cleanName(s) {
     return String(s == null ? "" : s).replace(/[\u0000-\u001F\u007F-\u009F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
   }
+  // In chat messages, "TRZ 52868 48177" looks like a 10-digit phone number and WhatsApp makes it a
+  // "call" link. Middle dots ("TRZ·52868·48177") keep it readable without the phone-number look.
+  function msgCode(code) { return OAVG.display(code).replace(/ /g, "\u00B7"); }
+  // Accept codes pasted back from a message: dots / bullets / invisible characters -> spaces.
+  function looseCode(text) { return String(text).replace(/[\u00B7\u2022\u2027\u30FB.\u200B-\u200D\u2060\uFEFF]/g, " "); }
   function gmapsUrl(code, navigate) {
     var c = OAVG.decode(code), ll = fmt(c.lat) + "," + fmt(c.lon);
     return navigate ? "https://www.google.com/maps/dir/?api=1&destination=" + ll
@@ -220,7 +225,7 @@
   }
 
   function fromCode(text) {
-    var code = OAVG.normalize(text);           // throws OAVGError with a clear message
+    var code = OAVG.normalize(looseCode(text)); // throws OAVGError with a clear message
     var c = OAVG.decode(code);
     update(code, c.lat, c.lon, { typed: true });
   }
@@ -385,7 +390,7 @@
   }
   function sendShare(code, name, how) {
     var disp = OAVG.display(code), url = shareUrl(code, name);
-    var text = (name ? name + "\n" : "") + disp;
+    var text = (name ? name + "\n" : "") + msgCode(code);
     var full = text + "\n" + url;
     if (how === "native") {
       navigator.share({ title: name || disp, text: text, url: url }).catch(function (e) {
@@ -507,10 +512,8 @@
       acts.appendChild(mkBtn("Copy", "btn btn-small btn-ghost", "Copy " + disp, function () { copy(disp, "Code copied"); }));
       acts.appendChild(mkBtn("Delete", "btn btn-small btn-ghost btn-del", "Delete " + who, function () { deletePlace(item.code); }));
     } else {
-      var isSaved = !!savedNameFor(item.code);
-      var sv = mkBtn(isSaved ? "Saved ✓" : "Save", "btn btn-small", "Save " + who, function () { askSave(item.code, item.name); });
-      sv.disabled = isSaved;
-      acts.appendChild(sv);
+      li.className = "is-recent";
+      acts.appendChild(mkBtn("Save", "btn btn-small", "Save " + who, function () { askSave(item.code, item.name); }));
       acts.appendChild(navLink(item.code, who));
       acts.appendChild(mkBtn("Remove", "btn btn-small btn-ghost btn-del", "Remove " + who + " from recent", function () {
         storeRecent(loadRecent().filter(function (x) { return x.code !== item.code; })); renderRecent();
@@ -582,7 +585,9 @@
     storeRecent(l);
   }
   function renderRecent() {
-    var l = loadRecent().filter(validCode), ul = $("recentList");
+    // A received place that I saved lives in My places only; delete it there and it shows up here again.
+    var l = loadRecent().filter(validCode).filter(function (x) { return !savedNameFor(x.code); });
+    var ul = $("recentList");
     ul.textContent = "";
     l.forEach(function (item) { ul.appendChild(placeRow(item, "recent")); });
     $("recentBox").hidden = l.length === 0;
